@@ -241,16 +241,6 @@ function App() {
       return;
     }
 
-    const selectedPath = await open({
-      title: "Choose a destination for moved photos",
-      directory: true,
-      multiple: false,
-    });
-
-    if (typeof selectedPath !== "string") {
-      return;
-    }
-
     setIsExporting(true);
     setExportProgress({
       processedCount: 0,
@@ -266,7 +256,6 @@ function App() {
       }));
       const summary = await invoke<ExportSummary>("export_photos_by_decision", {
         sourceRoot: folderPath,
-        destinationRoot: selectedPath,
         decisions: exportPayload,
       });
       const nextPhotos = buildMovedPhotos(photos, summary.movedPhotos);
@@ -283,17 +272,17 @@ function App() {
         setLoadError("");
       });
       await message(
-        `Moved ${summary.exportedCount} photos into pick, hold, reject, and unrated folders.\n\n${formatDecisionSummary(counts)}\n\nDestination:\n${summary.destinationRoot}`,
+        `Moved ${summary.exportedCount} photos into pick, hold, reject, and unrated folders inside the loaded folder.\n\n${formatDecisionSummary(counts)}\n\nRoot:\n${summary.destinationRoot}`,
         {
-          title: "Move complete",
+          title: "Organization complete",
           kind: "info",
         },
       );
     } catch (error) {
       const nextError =
-        error instanceof Error ? error.message : "The export could not be completed.";
+        error instanceof Error ? error.message : "The organization could not be completed.";
       await message(nextError, {
-        title: "Export failed",
+        title: "Organization failed",
         kind: "error",
       });
     } finally {
@@ -682,7 +671,7 @@ function App() {
             disabled={!photos.length || isExporting}
             type="button"
           >
-            {isExporting ? "Moving…" : "Move To Folders"}
+            {isExporting ? "Organizing…" : "Organize By Rating"}
           </button>
         </div>
       </header>
@@ -730,13 +719,13 @@ function App() {
             ) : null}
             {lastExportPath ? (
               <p className="session-note" title={lastExportPath}>
-                Last move: {lastExportPath}
+                Organized in: {lastExportPath}
               </p>
             ) : null}
             {isExporting && exportProgress ? (
               <div className="export-progress" aria-live="polite">
                 <div className="export-progress__meta">
-                  <span>Moving photos</span>
+                  <span>Organizing photos</span>
                   <strong>
                     {exportProgress.processedCount} / {exportProgress.totalCount}
                   </strong>

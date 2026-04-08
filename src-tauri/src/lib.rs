@@ -124,20 +124,19 @@ fn scan_photo_directory(path: String) -> Result<Vec<PhotoEntry>, String> {
 fn export_photos_by_decision(
     app: AppHandle,
     source_root: String,
-    destination_root: String,
     decisions: Vec<ExportDecision>,
 ) -> Result<ExportSummary, String> {
     if decisions.is_empty() {
-        return Err("There are no photos to export.".into());
+        return Err("There are no photos to organize.".into());
     }
 
     let canonical_source_root = PathBuf::from(&source_root)
         .canonicalize()
         .map_err(|error| format!("Could not read the source folder: {error}"))?;
-    let destination_root = PathBuf::from(&destination_root);
+    let destination_root = canonical_source_root.clone();
 
     fs::create_dir_all(&destination_root)
-        .map_err(|error| format!("Could not create the export folder: {error}"))?;
+        .map_err(|error| format!("Could not prepare the rating folders: {error}"))?;
     let total_count = decisions.len();
     let mut moved_photos = Vec::with_capacity(total_count);
 
@@ -146,20 +145,17 @@ fn export_photos_by_decision(
 
         if !source_path.is_file() {
             return Err(format!(
-                "Could not export missing file: {}",
+                "Could not organize missing file: {}",
                 source_path.display()
             ));
         }
 
         let decision_folder = decision_folder_name(&decision.decision)?;
-        let relative_path = source_path
-            .strip_prefix(&canonical_source_root)
-            .ok()
-            .map(Path::to_path_buf)
+        let relative_path = normalize_relative_path(&source_path, &canonical_source_root)
             .or_else(|| source_path.file_name().map(PathBuf::from))
             .ok_or_else(|| {
                 format!(
-                    "Could not determine export path for {}",
+                    "Could not determine organization path for {}",
                     source_path.display()
                 )
             })?;
@@ -168,10 +164,32 @@ fn export_photos_by_decision(
         if let Some(parent) = target_path.parent() {
             fs::create_dir_all(parent).map_err(|error| {
                 format!(
-                    "Could not create export folders for {}: {error}",
+                    "Could not create rating folders for {}: {error}",
                     target_path.display()
                 )
             })?;
+        }
+
+        if source_path == target_path {
+            moved_photos.push(MovedPhoto {
+                source_path: source_path.to_string_lossy().to_string(),
+                destination_path: target_path.to_string_lossy().to_string(),
+            });
+            let current_name = source_path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default()
+                .to_string();
+            let _ = app.emit(
+                "export-progress",
+                ExportProgress {
+                    processed_count: index + 1,
+                    total_count,
+                    current_name,
+                    current_decision: decision.decision.clone(),
+                },
+            );
+            continue;
         }
 
         move_file(&source_path, &target_path).map_err(|error| {
@@ -226,6 +244,28 @@ fn decision_folder_name(decision: &str) -> Result<&'static str, String> {
         "unrated" => Ok("unrated"),
         other => Err(format!("Unsupported decision '{other}'.")),
     }
+}
+
+fn normalize_relative_path(path: &Path, source_root: &Path) -> Option<PathBuf> {
+    let relative_path = path.strip_prefix(source_root).ok()?;
+    let mut components = relative_path.components();
+    let first = components.next();
+
+    match first.and_then(|component| component.as_os_str().to_str()) {
+        Some(folder) if is_decision_folder_name(folder) => {
+            let remainder = components.as_path();
+            if remainder.as_os_str().is_empty() {
+                path.file_name().map(PathBuf::from)
+            } else {
+                Some(remainder.to_path_buf())
+            }
+        }
+        _ => Some(relative_path.to_path_buf()),
+    }
+}
+
+fn is_decision_folder_name(value: &str) -> bool {
+    matches!(value, "pick" | "hold" | "reject" | "unrated")
 }
 
 fn move_file(source: &Path, destination: &Path) -> Result<(), std::io::Error> {
