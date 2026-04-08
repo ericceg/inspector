@@ -530,11 +530,13 @@ function App() {
   return (
     <main
       ref={shellRef}
-      className={
-        isTopbarCollapsed
-          ? "inspector-shell is-topbar-collapsed"
-          : "inspector-shell"
-      }
+      className={[
+        "inspector-shell",
+        isTopbarCollapsed ? "is-topbar-collapsed" : "",
+        isFocusView ? "is-focus-view" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       style={shellStyle}
     >
       <header ref={topbarRef} className="topbar">

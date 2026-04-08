@@ -63,7 +63,12 @@ button {
   grid-template-rows: 0rem 0.75rem 1fr;
 }
 
+.inspector-shell.is-focus-view {
+  grid-template-rows: 0rem 0.5rem 1fr;
+}
+
 .topbar {
+  min-height: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -74,6 +79,16 @@ button {
   box-sizing: border-box;
   height: 100%;
   overflow: auto;
+}
+
+.inspector-shell.is-topbar-collapsed .topbar,
+.inspector-shell.is-focus-view .topbar {
+  padding: 0;
+  border-bottom: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .panel-splitter {
@@ -102,6 +117,16 @@ button {
 .panel-splitter--top::after {
   width: 4rem;
   height: 0.22rem;
+}
+
+.inspector-shell.is-focus-view .panel-splitter--top {
+  background: rgba(229, 231, 235, 0.9);
+}
+
+.inspector-shell.is-focus-view .panel-splitter--top::after {
+  width: 3rem;
+  height: 0.16rem;
+  background: rgba(148, 163, 184, 0.72);
 }
 
 .panel-splitter--vertical {
