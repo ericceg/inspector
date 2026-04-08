@@ -7,6 +7,7 @@ use std::{
     process::Command,
     time::UNIX_EPOCH,
 };
+use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
 
 #[derive(Debug, Serialize)]
@@ -32,6 +33,23 @@ struct ExportDecision {
 struct ExportSummary {
     destination_root: String,
     exported_count: usize,
+    moved_photos: Vec<MovedPhoto>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MovedPhoto {
+    source_path: String,
+    destination_path: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportProgress {
+    processed_count: usize,
+    total_count: usize,
+    current_name: String,
+    current_decision: String,
 }
 
 #[tauri::command]
@@ -104,6 +122,7 @@ fn scan_photo_directory(path: String) -> Result<Vec<PhotoEntry>, String> {
 
 #[tauri::command]
 fn export_photos_by_decision(
+    app: AppHandle,
     source_root: String,
     destination_root: String,
     decisions: Vec<ExportDecision>,
@@ -119,8 +138,10 @@ fn export_photos_by_decision(
 
     fs::create_dir_all(&destination_root)
         .map_err(|error| format!("Could not create the export folder: {error}"))?;
+    let total_count = decisions.len();
+    let mut moved_photos = Vec::with_capacity(total_count);
 
-    for decision in &decisions {
+    for (index, decision) in decisions.iter().enumerate() {
         let source_path = PathBuf::from(&decision.path);
 
         if !source_path.is_file() {
@@ -160,11 +181,31 @@ fn export_photos_by_decision(
                 target_path.display()
             )
         })?;
+        moved_photos.push(MovedPhoto {
+            source_path: source_path.to_string_lossy().to_string(),
+            destination_path: target_path.to_string_lossy().to_string(),
+        });
+
+        let current_name = source_path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default()
+            .to_string();
+        let _ = app.emit(
+            "export-progress",
+            ExportProgress {
+                processed_count: index + 1,
+                total_count,
+                current_name,
+                current_decision: decision.decision.clone(),
+            },
+        );
     }
 
     Ok(ExportSummary {
         destination_root: destination_root.to_string_lossy().to_string(),
-        exported_count: decisions.len(),
+        exported_count: total_count,
+        moved_photos,
     })
 }
 

@@ -28,9 +28,22 @@ export type ExportPhotoDecision = {
   decision: PhotoDecision;
 };
 
+export type MovedPhoto = {
+  sourcePath: string;
+  destinationPath: string;
+};
+
 export type ExportSummary = {
   destinationRoot: string;
   exportedCount: number;
+  movedPhotos: MovedPhoto[];
+};
+
+export type ExportProgress = {
+  processedCount: number;
+  totalCount: number;
+  currentName: string;
+  currentDecision: PhotoDecision;
 };
 
 export const DEFAULT_VIEWER_STATE: ViewerState = {

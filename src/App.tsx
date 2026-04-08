@@ -1,4 +1,5 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { message, open } from "@tauri-apps/plugin-dialog";
 import {
   type CSSProperties,
@@ -13,7 +14,9 @@ import {
   type BackendPhoto,
   type DecisionCounts,
   type ExportPhotoDecision,
+  type ExportProgress,
   type ExportSummary,
+  type MovedPhoto,
   type Photo,
   type PhotoDecision,
   type StripFilter,
@@ -62,6 +65,7 @@ function App() {
   const [folderPath, setFolderPath] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
   const [loadError, setLoadError] = useState("");
   const [lastExportPath, setLastExportPath] = useState("");
   const shellRef = useRef<HTMLElement | null>(null);
@@ -248,6 +252,12 @@ function App() {
     }
 
     setIsExporting(true);
+    setExportProgress({
+      processedCount: 0,
+      totalCount: photos.length,
+      currentName: "",
+      currentDecision: "unrated",
+    });
 
     try {
       const exportPayload: ExportPhotoDecision[] = photos.map((photo) => ({
@@ -259,13 +269,7 @@ function App() {
         destinationRoot: selectedPath,
         decisions: exportPayload,
       });
-      const rescanned = await invoke<BackendPhoto[]>("scan_photo_directory", {
-        path: summary.destinationRoot,
-      });
-      const nextPhotos = rescanned.map((photo) => ({
-        ...photo,
-        url: convertFileSrc(photo.previewPath),
-      }));
+      const nextPhotos = buildMovedPhotos(photos, summary.movedPhotos);
 
       setLastExportPath(summary.destinationRoot);
       startTransition(() => {
@@ -294,6 +298,7 @@ function App() {
       });
     } finally {
       setIsExporting(false);
+      setExportProgress(null);
     }
   };
 
@@ -428,6 +433,29 @@ function App() {
     window.addEventListener("keydown", listener);
     return () => window.removeEventListener("keydown", listener);
   }, [handleGlobalKeyDown]);
+
+  useEffect(() => {
+    let isMounted = true;
+    let dispose: (() => void) | undefined;
+
+    void listen<ExportProgress>("export-progress", (event) => {
+      if (isMounted) {
+        setExportProgress(event.payload);
+      }
+    }).then((unlisten) => {
+      if (isMounted) {
+        dispose = unlisten;
+        return;
+      }
+
+      unlisten();
+    });
+
+    return () => {
+      isMounted = false;
+      dispose?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (!topbarRef.current || topbarHeight !== null) {
@@ -597,6 +625,9 @@ function App() {
   const shellStyle = {
     "--topbar-height": `${isTopbarCollapsed ? 0 : topbarHeight ?? DEFAULT_TOPBAR_HEIGHT}px`,
   } as CSSProperties;
+  const exportProgressValue = exportProgress
+    ? Math.round((exportProgress.processedCount / Math.max(exportProgress.totalCount, 1)) * 100)
+    : 0;
 
   return (
     <main
@@ -701,6 +732,34 @@ function App() {
               <p className="session-note" title={lastExportPath}>
                 Last move: {lastExportPath}
               </p>
+            ) : null}
+            {isExporting && exportProgress ? (
+              <div className="export-progress" aria-live="polite">
+                <div className="export-progress__meta">
+                  <span>Moving photos</span>
+                  <strong>
+                    {exportProgress.processedCount} / {exportProgress.totalCount}
+                  </strong>
+                </div>
+                <div
+                  aria-label={`Move progress ${exportProgressValue}%`}
+                  aria-valuemax={100}
+                  aria-valuemin={0}
+                  aria-valuenow={exportProgressValue}
+                  className="export-progress__track"
+                  role="progressbar"
+                >
+                  <span
+                    className="export-progress__fill"
+                    style={{ width: `${exportProgressValue}%` }}
+                  />
+                </div>
+                <p className="export-progress__label">
+                  {exportProgress.currentName
+                    ? `${exportProgress.currentDecision} · ${exportProgress.currentName}`
+                    : "Preparing move…"}
+                </p>
+              </div>
             ) : null}
             {loadError ? <p className="session-error">{loadError}</p> : null}
           </div>
@@ -1113,6 +1172,56 @@ function formatDecisionSummary(counts: DecisionCounts) {
   return labels
     .map(([decision, label]) => `${counts[decision]} ${label}`)
     .join(" • ");
+}
+
+function buildMovedPhotos(photos: Photo[], movedPhotos: MovedPhoto[]) {
+  const movedPhotoMap = new Map(
+    movedPhotos.map((entry) => [entry.sourcePath, entry.destinationPath]),
+  );
+
+  return photos.map((photo) => {
+    const destinationPath = movedPhotoMap.get(photo.path);
+
+    if (!destinationPath) {
+      return photo;
+    }
+
+    const nextPreviewPath = isBrowserViewableExtension(photo.extension)
+      ? destinationPath
+      : photo.previewPath;
+
+    return {
+      ...photo,
+      id: destinationPath,
+      path: destinationPath,
+      directory: parentPath(destinationPath),
+      previewPath: nextPreviewPath,
+      url: convertFileSrc(nextPreviewPath),
+    };
+  });
+}
+
+function isBrowserViewableExtension(extension: string) {
+  return [
+    "jpg",
+    "jpeg",
+    "png",
+    "tif",
+    "tiff",
+    "webp",
+    "gif",
+    "avif",
+    "heic",
+    "heif",
+    "bmp",
+  ].includes(extension.toLowerCase());
+}
+
+function parentPath(path: string) {
+  const separator = path.includes("\\") ? "\\" : "/";
+  const parts = path.split(/[/\\]/);
+  parts.pop();
+  return parts.join(separator) || path;
 }
 
 export default App;
