@@ -1,8 +1,16 @@
 # Inspector
 
-[![Platform](https://img.shields.io/badge/Platform-macOS-lightgrey.svg)]() [![Tauri](https://img.shields.io/badge/Tauri-2.x-24C8DB.svg)](https://tauri.app) [![React](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev) [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6.svg)](https://www.typescriptlang.org)
 
-**Local desktop photo reviewer for fast culling with a locked zoom.** Open a folder, zoom into the detail you care about, then move through the set without resetting the view.
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
+[![Framework](https://img.shields.io/badge/framework-Tauri%20v2-yellow)](https://tauri.app/)
+[![Backend](https://img.shields.io/badge/backend-Rust-orange)](https://www.rust-lang.org/)
+[![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20TypeScript-3178c6)](https://reactjs.org/)
+[![Version](https://img.shields.io/badge/version-v0.1.0-green)](https://github.com/ericceg/inspector/releases/latest)
+
+
+**Lightweight photo reviewer for fast Tinder-style culling with a locked zoom.** Open a folder, zoom into the detail you care about, then move through the set without resetting the view.
+Do the whole selection process just using the keyboard, and when you're done, have your picks automatically organized into subfolders. 
 
 ## Why I Made This
 
@@ -13,19 +21,10 @@ Most photo browsers make that comparison awkward. You zoom in, move to the next 
 Inspector is built around one idea:
 
 - **Keep the zoom and framing locked** while moving through a folder
-- **Cull quickly** with simple pick / hold / reject decisions
+- **Cull quickly** with simple pick/hold/reject decisions
 - **Compare adjacent frames** without changing your place
 - **Stay local** by reviewing directly from a folder on disk
 
-## Features
-
-- **Locked view state**: keep the same zoom and pan while stepping through images
-- **Previous-frame compare**: toggle a side-by-side view against the previous image
-- **Fast triage**: mark each frame as `pick`, `hold`, or `reject`
-- **Filterable filmstrip**: view all frames or only one decision bucket
-- **RAW-friendly workflow**: browser-viewable files open directly, RAW files get preview JPEGs
-- **Adjustable workspace**: resize or collapse the top bar and both side rails
-- **Keyboard-first review**: navigate and rate without leaving the keyboard
 
 ## Supported Files
 
@@ -37,15 +36,15 @@ RAW formats:
 
 - `cr2`, `cr3`, `nef`, `nrw`, `arw`, `sr2`, `orf`, `rw2`, `raf`, `dng`, `pef`, `raw`
 
-RAW previews are currently generated on **macOS** using system tools.
+Inspector runs on macOS, Windows, and Linux through Tauri. RAW preview generation is currently implemented on **macOS** using system tools.
 
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
 | `O` | Open folder |
-| `←` `→` | Previous / next frame |
-| `H J K L` | Previous / next frame |
+| `←` / `H` / `K` | Previous frame |
+| `→` / `J` / `L` | Next frame |
 | `1` | Pick |
 | `2` | Hold |
 | `3` | Reject |
@@ -77,6 +76,7 @@ npm run tauri build
 
 ## Notes
 
-- This app does not currently persist ratings across sessions.
-- RAW preview generation is implemented on macOS; other platforms will not decode RAW files yet.
+- Ratings are session-local until you run **Organize By Rating**.
+- Organizing moves files inside the loaded folder and preserves nested folder structure under `pick`, `hold`, `reject`, and `unrated`.
+- RAW preview generation is implemented on macOS; other platforms can still review browser-viewable image formats.
 - Preview JPEGs for RAW files are cached under your system temp directory.
