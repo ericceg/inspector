@@ -12,6 +12,10 @@
 **Lightweight photo reviewer for fast Tinder-style culling with a locked zoom.** Open a folder, zoom into the detail you care about, then move through the set without resetting the view.
 Do the whole selection process just using the keyboard, and when you're done, have your picks automatically organized into subfolders. 
 
+## Installation
+
+Download the latest prebuilt app for macOS, Windows, or Linux from the [GitHub releases page](https://github.com/ericceg/inspector/releases/latest).
+
 ## Why I Made This
 
 When I am reviewing a shoot, I usually care about a very specific region: eyes in a portrait, sharpness on a product edge, motion blur in a hand, or whether two nearly identical frames differ in some small way.
