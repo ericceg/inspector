@@ -8,6 +8,11 @@ export type ViewerState = {
   centerY: number;
 };
 
+export type PhotoMetadataValue = {
+  label: string;
+  value: string;
+};
+
 export type BackendPhoto = {
   id: string;
   path: string;

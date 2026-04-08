@@ -20,6 +20,7 @@ import {
   type MovedPhoto,
   type Photo,
   type PhotoDecision,
+  type PhotoMetadataValue,
   type StripFilter,
   DEFAULT_VIEWER_STATE,
 } from "./types";
@@ -57,6 +58,7 @@ function App() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [stripFilter, setStripFilter] = useState<StripFilter>("all");
   const [showCompare, setShowCompare] = useState(false);
+  const [showImageValues, setShowImageValues] = useState(false);
   const [isTopbarCollapsed, setIsTopbarCollapsed] = useState(false);
   const [isLeftRailCollapsed, setIsLeftRailCollapsed] = useState(false);
   const [isRightRailCollapsed, setIsRightRailCollapsed] = useState(false);
@@ -68,6 +70,15 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
+  const [metadataByPhotoId, setMetadataByPhotoId] = useState<
+    Record<string, PhotoMetadataValue[]>
+  >({});
+  const [metadataErrorsByPhotoId, setMetadataErrorsByPhotoId] = useState<Record<string, string>>(
+    {},
+  );
+  const [metadataLoadingByPhotoId, setMetadataLoadingByPhotoId] = useState<
+    Record<string, boolean>
+  >({});
   const [loadError, setLoadError] = useState("");
   const [lastExportPath, setLastExportPath] = useState("");
   const shellRef = useRef<HTMLElement | null>(null);
@@ -99,6 +110,15 @@ function App() {
   const activeDecision = selectedPhoto
     ? resolveDecision(decisions, selectedPhoto.id)
     : "unrated";
+  const selectedPhotoMetadata = selectedPhoto
+    ? metadataByPhotoId[selectedPhoto.id]
+    : undefined;
+  const selectedPhotoMetadataError = selectedPhoto
+    ? metadataErrorsByPhotoId[selectedPhoto.id] ?? ""
+    : "";
+  const isSelectedPhotoMetadataLoading = selectedPhoto
+    ? metadataLoadingByPhotoId[selectedPhoto.id] === true
+    : false;
   const isFocusView =
     isTopbarCollapsed && isLeftRailCollapsed && isRightRailCollapsed;
 
@@ -152,9 +172,13 @@ function App() {
         setSelectedIndex(0);
         setStripFilter("all");
         setShowCompare(false);
+        setShowImageValues(false);
         setViewerState(DEFAULT_VIEWER_STATE);
         setFolderPath(selectedPath);
         setLastExportPath("");
+        setMetadataByPhotoId({});
+        setMetadataErrorsByPhotoId({});
+        setMetadataLoadingByPhotoId({});
       });
     } catch (error) {
       const nextError =
@@ -274,9 +298,13 @@ function App() {
         setSelectedIndex(0);
         setStripFilter("all");
         setShowCompare(false);
+        setShowImageValues(false);
         setViewerState(DEFAULT_VIEWER_STATE);
         setFolderPath(summary.destinationRoot);
         setLoadError("");
+        setMetadataByPhotoId({});
+        setMetadataErrorsByPhotoId({});
+        setMetadataLoadingByPhotoId({});
       });
       await message(
         `Moved ${summary.exportedCount} photos into pick, hold, reject, and unrated folders inside the loaded folder.\n\n${formatDecisionSummary(counts)}\n\nRoot:\n${summary.destinationRoot}`,
@@ -340,6 +368,61 @@ function App() {
     lastRightRailWidthRef.current = rightRailWidth;
     setIsRightRailCollapsed(true);
   };
+
+  const loadPhotoMetadata = useEffectEvent(async (photo: Photo) => {
+    if (
+      Object.prototype.hasOwnProperty.call(metadataByPhotoId, photo.id) ||
+      Object.prototype.hasOwnProperty.call(metadataErrorsByPhotoId, photo.id) ||
+      metadataLoadingByPhotoId[photo.id]
+    ) {
+      return;
+    }
+
+    setMetadataLoadingByPhotoId((current) => ({
+      ...current,
+      [photo.id]: true,
+    }));
+
+    try {
+      const metadata = await invoke<PhotoMetadataValue[]>("read_photo_metadata", {
+        path: photo.path,
+      });
+
+      setMetadataByPhotoId((current) => ({
+        ...current,
+        [photo.id]: metadata,
+      }));
+      setMetadataErrorsByPhotoId((current) => {
+        if (!Object.prototype.hasOwnProperty.call(current, photo.id)) {
+          return current;
+        }
+
+        const nextErrors = { ...current };
+        delete nextErrors[photo.id];
+        return nextErrors;
+      });
+    } catch (error) {
+      const nextError =
+        error instanceof Error
+          ? error.message
+          : "Could not read embedded image values.";
+
+      setMetadataErrorsByPhotoId((current) => ({
+        ...current,
+        [photo.id]: nextError,
+      }));
+    } finally {
+      setMetadataLoadingByPhotoId((current) => {
+        if (!Object.prototype.hasOwnProperty.call(current, photo.id)) {
+          return current;
+        }
+
+        const nextLoading = { ...current };
+        delete nextLoading[photo.id];
+        return nextLoading;
+      });
+    }
+  });
 
   const adjustZoom = (factor: number) => {
     setViewerState((current) => ({
@@ -488,6 +571,14 @@ function App() {
       setSelectedIndex(findPhotoIndex(photos, filteredStripPhotos[0].id));
     }
   }, [decisions, filteredStripPhotos, photos, selectedPhoto, stripFilter]);
+
+  useEffect(() => {
+    if (!showImageValues || !selectedPhoto) {
+      return;
+    }
+
+    void loadPhotoMetadata(selectedPhoto);
+  }, [loadPhotoMetadata, selectedPhoto, showImageValues]);
 
   useLayoutEffect(() => {
     if (isLeftRailCollapsed) {
@@ -1032,30 +1123,61 @@ function App() {
           </div>
 
           <div className="rail__section">
-            <p className="section-label">Current</p>
+            <div className="section-heading">
+              <p className="section-label">Current</p>
+              <button
+                className={showImageValues ? "button button--compact is-active" : "button button--compact"}
+                disabled={!selectedPhoto}
+                onClick={() => setShowImageValues((current) => !current)}
+                type="button"
+              >
+                {showImageValues ? "Hide Image Data" : "Show Image Data"}
+              </button>
+            </div>
             {selectedPhoto ? (
-              <div className="detail-list">
-                <div className="detail-list__row">
-                  <span>Name</span>
-                  <strong>{selectedPhoto.name}</strong>
+              <>
+                <div className="detail-list">
+                  <div className="detail-list__row">
+                    <span>Name</span>
+                    <strong>{selectedPhoto.name}</strong>
+                  </div>
+                  <div className="detail-list__row">
+                    <span>Status</span>
+                    <strong className={`decision-tag decision-tag--${activeDecision}`}>
+                      {DECISION_LABELS[activeDecision]}
+                    </strong>
+                  </div>
+                  <div className="detail-list__row">
+                    <span>Zoom</span>
+                    <strong>{Math.round(viewerState.zoom * 100)}%</strong>
+                  </div>
+                  <div className="detail-list__row">
+                    <span>Folder</span>
+                    <strong title={selectedPhoto.directory}>
+                      {summarizePath(selectedPhoto.directory)}
+                    </strong>
+                  </div>
                 </div>
-                <div className="detail-list__row">
-                  <span>Status</span>
-                  <strong className={`decision-tag decision-tag--${activeDecision}`}>
-                    {DECISION_LABELS[activeDecision]}
-                  </strong>
-                </div>
-                <div className="detail-list__row">
-                  <span>Zoom</span>
-                  <strong>{Math.round(viewerState.zoom * 100)}%</strong>
-                </div>
-                <div className="detail-list__row">
-                  <span>Folder</span>
-                  <strong title={selectedPhoto.directory}>
-                    {summarizePath(selectedPhoto.directory)}
-                  </strong>
-                </div>
-              </div>
+
+                {showImageValues ? (
+                  <div className="detail-list detail-list--metadata">
+                    {isSelectedPhotoMetadataLoading ? (
+                      <p className="muted-copy">Reading embedded image values…</p>
+                    ) : selectedPhotoMetadataError ? (
+                      <p className="muted-copy">{selectedPhotoMetadataError}</p>
+                    ) : selectedPhotoMetadata?.length ? (
+                      selectedPhotoMetadata.map((item) => (
+                        <div className="detail-list__row" key={`${item.label}:${item.value}`}>
+                          <span>{item.label}</span>
+                          <strong>{item.value}</strong>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="muted-copy">No embedded image values found for this file.</p>
+                    )}
+                  </div>
+                ) : null}
+              </>
             ) : (
               <p className="muted-copy">No frame selected yet.</p>
             )}

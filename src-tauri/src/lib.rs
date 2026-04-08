@@ -1,8 +1,11 @@
+use exif::Reader as ExifReader;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::hash_map::DefaultHasher,
     fs,
+    fs::File,
     hash::{Hash, Hasher},
+    io::BufReader,
     path::{Path, PathBuf},
     process::Command,
     time::UNIX_EPOCH,
@@ -19,6 +22,13 @@ struct PhotoEntry {
     extension: String,
     directory: String,
     preview_path: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PhotoMetadataValue {
+    label: String,
+    value: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -227,6 +237,17 @@ fn export_photos_by_decision(
     })
 }
 
+#[tauri::command]
+fn read_photo_metadata(path: String) -> Result<Vec<PhotoMetadataValue>, String> {
+    let photo_path = PathBuf::from(&path);
+
+    if !photo_path.is_file() {
+        return Err("The selected photo is no longer available.".into());
+    }
+
+    Ok(extract_photo_metadata(&photo_path))
+}
+
 fn is_supported_photo(path: &Path) -> bool {
     path.extension()
         .and_then(|value| value.to_str())
@@ -280,6 +301,114 @@ fn move_file(source: &Path, destination: &Path) -> Result<(), std::io::Error> {
             fs::remove_file(source)?;
             Ok(())
         }
+    }
+}
+
+fn extract_photo_metadata(path: &Path) -> Vec<PhotoMetadataValue> {
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(_) => return Vec::new(),
+    };
+    let mut reader = BufReader::new(file);
+    let exif = match ExifReader::new().read_from_container(&mut reader) {
+        Ok(exif) => exif,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut values = Vec::new();
+
+    push_metadata_value(
+        &mut values,
+        "ISO",
+        find_exif_value(&exif, &["PhotographicSensitivity", "ISOSpeedRatings"]),
+    );
+    push_metadata_value(
+        &mut values,
+        "Aperture",
+        find_exif_value(&exif, &["FNumber"]).map(format_aperture),
+    );
+    push_metadata_value(
+        &mut values,
+        "Shutter",
+        find_exif_value(&exif, &["ExposureTime"]),
+    );
+    push_metadata_value(
+        &mut values,
+        "Focal Length",
+        find_exif_value(&exif, &["FocalLength"]),
+    );
+    push_metadata_value(
+        &mut values,
+        "Lens",
+        find_exif_value(&exif, &["LensModel", "LensSpecification"]),
+    );
+    push_metadata_value(
+        &mut values,
+        "Camera",
+        format_camera(
+            find_exif_value(&exif, &["Make"]),
+            find_exif_value(&exif, &["Model"]),
+        ),
+    );
+    push_metadata_value(
+        &mut values,
+        "Captured",
+        find_exif_value(&exif, &["DateTimeOriginal"]).map(format_capture_time),
+    );
+
+    values
+}
+
+fn push_metadata_value(
+    values: &mut Vec<PhotoMetadataValue>,
+    label: &str,
+    value: Option<String>,
+) {
+    if let Some(value) = value.filter(|value| !value.is_empty()) {
+        values.push(PhotoMetadataValue {
+            label: label.to_string(),
+            value,
+        });
+    }
+}
+
+fn find_exif_value(exif: &exif::Exif, tags: &[&str]) -> Option<String> {
+    tags.iter().find_map(|tag| {
+        exif.fields()
+            .find(|field| field.tag.to_string() == *tag)
+            .map(|field| field.display_value().with_unit(exif).to_string())
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    })
+}
+
+fn format_aperture(value: String) -> String {
+    if value.starts_with("f/") {
+        value
+    } else {
+        format!("f/{value}")
+    }
+}
+
+fn format_capture_time(value: String) -> String {
+    value.replacen(':', "-", 2)
+}
+
+fn format_camera(make: Option<String>, model: Option<String>) -> Option<String> {
+    match (make, model) {
+        (Some(make), Some(model)) => {
+            let normalized_make = make.to_ascii_lowercase();
+            let normalized_model = model.to_ascii_lowercase();
+
+            if normalized_model.starts_with(&normalized_make) {
+                Some(model)
+            } else {
+                Some(format!("{make} {model}"))
+            }
+        }
+        (Some(make), None) => Some(make),
+        (None, Some(model)) => Some(model),
+        (None, None) => None,
     }
 }
 
@@ -445,7 +574,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             scan_photo_directory,
-            export_photos_by_decision
+            export_photos_by_decision,
+            read_photo_metadata
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

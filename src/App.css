@@ -204,6 +204,11 @@ button {
   font-size: 0.94rem;
 }
 
+.button--compact {
+  padding: 0.38rem 0.62rem;
+  font-size: 0.78rem;
+}
+
 .button:hover:not(:disabled),
 .filter-pill:hover:not(:disabled),
 .filmstrip__item:hover,
@@ -790,6 +795,11 @@ body.is-dragging-photo-stage {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+.detail-list--metadata {
+  padding-top: 0.2rem;
+  border-top: 1px solid var(--border);
 }
 
 .detail-list__row span,
