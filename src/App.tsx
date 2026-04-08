@@ -42,12 +42,20 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
 
-  const selectedPhoto = photos[selectedIndex] ?? null;
-  const comparePhoto = selectedIndex > 0 ? photos[selectedIndex - 1] : null;
   const counts = countDecisions(photos, decisions);
   const filteredStripPhotos = photos.filter((photo) =>
     matchesFilter(resolveDecision(decisions, photo.id), stripFilter),
   );
+  const navigablePhotos =
+    stripFilter === "all" ? photos : filteredStripPhotos;
+  const selectedPhoto = photos[selectedIndex] ?? null;
+  const selectedNavigableIndex = selectedPhoto
+    ? navigablePhotos.findIndex((photo) => photo.id === selectedPhoto.id)
+    : -1;
+  const comparePhoto =
+    selectedNavigableIndex > 0
+      ? navigablePhotos[selectedNavigableIndex - 1]
+      : null;
   const activeDecision = selectedPhoto
     ? resolveDecision(decisions, selectedPhoto.id)
     : "unrated";
@@ -116,13 +124,25 @@ function App() {
   };
 
   const moveSelection = (direction: -1 | 1) => {
-    if (!photos.length) {
+    if (!navigablePhotos.length) {
       return;
     }
 
-    setSelectedIndex((index) =>
-      clamp(index + direction, 0, Math.max(photos.length - 1, 0)),
-    );
+    const currentIndex = Math.max(selectedNavigableIndex, 0);
+    const nextPhoto =
+      navigablePhotos[
+        clamp(
+          currentIndex + direction,
+          0,
+          Math.max(navigablePhotos.length - 1, 0),
+        )
+      ];
+
+    if (!nextPhoto) {
+      return;
+    }
+
+    setSelectedIndex(findPhotoIndex(photos, nextPhoto.id));
   };
 
   const applyDecision = (decision: Exclude<PhotoDecision, "unrated">) => {
@@ -130,10 +150,25 @@ function App() {
       return;
     }
 
-    setDecisions((current) => ({ ...current, [selectedPhoto.id]: decision }));
-    setSelectedIndex((index) =>
-      clamp(index + 1, 0, Math.max(photos.length - 1, 0)),
-    );
+    const nextDecisions = { ...decisions, [selectedPhoto.id]: decision };
+    const nextSelectedId = findNextSelectionId({
+      photos,
+      currentFilteredPhotos: filteredStripPhotos,
+      currentSelectedId: selectedPhoto.id,
+      nextDecisions,
+      stripFilter,
+      fallbackPhotoId:
+        stripFilter === "all"
+          ? photos[clamp(selectedIndex + 1, 0, Math.max(photos.length - 1, 0))]
+              ?.id ?? selectedPhoto.id
+          : undefined,
+    });
+
+    setDecisions(nextDecisions);
+
+    if (nextSelectedId) {
+      setSelectedIndex(findPhotoIndex(photos, nextSelectedId));
+    }
   };
 
   const clearCurrentDecision = () => {
@@ -141,11 +176,22 @@ function App() {
       return;
     }
 
-    setDecisions((current) => {
-      const next = { ...current };
-      delete next[selectedPhoto.id];
-      return next;
+    const nextDecisions = { ...decisions };
+    delete nextDecisions[selectedPhoto.id];
+
+    const nextSelectedId = findNextSelectionId({
+      photos,
+      currentFilteredPhotos: filteredStripPhotos,
+      currentSelectedId: selectedPhoto.id,
+      nextDecisions,
+      stripFilter,
     });
+
+    setDecisions(nextDecisions);
+
+    if (nextSelectedId) {
+      setSelectedIndex(findPhotoIndex(photos, nextSelectedId));
+    }
   };
 
   const clearAllDecisions = () => {
@@ -255,13 +301,17 @@ function App() {
       return;
     }
 
-    if (
-      stripFilter !== "all" &&
-      !matchesFilter(resolveDecision(decisions, selectedPhoto.id), stripFilter)
-    ) {
-      setStripFilter("all");
+    if (stripFilter === "all") {
+      return;
     }
-  }, [decisions, selectedPhoto, stripFilter]);
+
+    if (
+      !matchesFilter(resolveDecision(decisions, selectedPhoto.id), stripFilter) &&
+      filteredStripPhotos.length
+    ) {
+      setSelectedIndex(findPhotoIndex(photos, filteredStripPhotos[0].id));
+    }
+  }, [decisions, filteredStripPhotos, photos, selectedPhoto, stripFilter]);
 
   return (
     <main className="inspector-shell">
@@ -595,6 +645,11 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+function findPhotoIndex(photos: Photo[], photoId: string) {
+  const index = photos.findIndex((photo) => photo.id === photoId);
+  return index === -1 ? 0 : index;
+}
+
 function resolveDecision(
   decisions: Record<string, PhotoDecision>,
   photoId: string,
@@ -626,6 +681,49 @@ function countForFilter(counts: DecisionCounts, filter: StripFilter) {
   }
 
   return counts[filter];
+}
+
+function findNextSelectionId({
+  photos,
+  currentFilteredPhotos,
+  currentSelectedId,
+  nextDecisions,
+  stripFilter,
+  fallbackPhotoId,
+}: {
+  photos: Photo[];
+  currentFilteredPhotos: Photo[];
+  currentSelectedId: string;
+  nextDecisions: Record<string, PhotoDecision>;
+  stripFilter: StripFilter;
+  fallbackPhotoId?: string;
+}) {
+  if (stripFilter === "all") {
+    return fallbackPhotoId ?? currentSelectedId;
+  }
+
+  const nextFilteredPhotos = photos.filter((photo) =>
+    matchesFilter(resolveDecision(nextDecisions, photo.id), stripFilter),
+  );
+
+  if (!nextFilteredPhotos.length) {
+    return currentSelectedId;
+  }
+
+  const currentFilteredIndex = currentFilteredPhotos.findIndex(
+    (photo) => photo.id === currentSelectedId,
+  );
+
+  if (currentFilteredIndex === -1) {
+    return nextFilteredPhotos[0]?.id ?? currentSelectedId;
+  }
+
+  return (
+    nextFilteredPhotos[currentFilteredIndex]?.id ??
+    nextFilteredPhotos[currentFilteredIndex - 1]?.id ??
+    nextFilteredPhotos[0]?.id ??
+    currentSelectedId
+  );
 }
 
 function summarizePath(path: string) {
