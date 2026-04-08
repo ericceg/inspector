@@ -80,3 +80,7 @@ npm run tauri build
 - Organizing moves files inside the loaded folder and preserves nested folder structure under `pick`, `hold`, `reject`, and `unrated`.
 - RAW preview generation is implemented on macOS; other platforms can still review browser-viewable image formats.
 - Preview JPEGs for RAW files are cached under your system temp directory.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
