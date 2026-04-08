@@ -51,11 +51,16 @@ button {
 }
 
 .inspector-shell {
+  --topbar-height: auto;
   height: 100vh;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: var(--topbar-height) 0.75rem 1fr;
   background: var(--app-bg);
   overflow: hidden;
+}
+
+.inspector-shell.is-topbar-collapsed {
+  grid-template-rows: 0rem 0.75rem 1fr;
 }
 
 .topbar {
@@ -66,6 +71,51 @@ button {
   padding: 1.5rem 1.75rem 1.1rem;
   border-bottom: 1px solid var(--border);
   background: var(--surface-1);
+  box-sizing: border-box;
+  height: 100%;
+  overflow: auto;
+}
+
+.panel-splitter {
+  position: relative;
+  background: var(--surface-2);
+  transition: background-color 160ms ease;
+}
+
+.panel-splitter::after {
+  content: "";
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.85);
+}
+
+.panel-splitter:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.panel-splitter--top {
+  cursor: row-resize;
+}
+
+.panel-splitter--top::after {
+  width: 4rem;
+  height: 0.22rem;
+}
+
+.panel-splitter--vertical {
+  width: 100%;
+  cursor: col-resize;
+}
+
+.panel-splitter--vertical::after {
+  width: 0.22rem;
+  height: 4rem;
+}
+
+.panel-splitter.is-collapsed {
+  background: rgba(37, 99, 235, 0.08);
 }
 
 .topbar__brand h1 {
@@ -144,11 +194,41 @@ button {
   border-color: #1d4ed8;
 }
 
+.button.is-active {
+  background: var(--accent-soft);
+  border-color: rgba(37, 99, 235, 0.28);
+  color: #0f172a;
+}
+
 .workspace {
+  --left-rail-width: 18rem;
+  --right-rail-width: 16rem;
   min-height: 0;
   display: grid;
-  grid-template-columns: 18rem minmax(0, 1fr) 16rem;
+  grid-template-columns:
+    var(--left-rail-width)
+    0.75rem
+    minmax(0, 1fr)
+    0.75rem
+    var(--right-rail-width);
+  grid-template-areas: "left left-handle viewer right-handle right";
   overflow: hidden;
+}
+
+.workspace.is-left-collapsed {
+  --left-rail-width: 0rem;
+}
+
+.workspace.is-right-collapsed {
+  --right-rail-width: 0rem;
+}
+
+.panel-splitter--left {
+  grid-area: left-handle;
+}
+
+.panel-splitter--right {
+  grid-area: right-handle;
 }
 
 .rail {
@@ -162,11 +242,17 @@ button {
 }
 
 .rail--left {
+  grid-area: left;
   border-right: 1px solid var(--border);
 }
 
 .rail--right {
+  grid-area: right;
   border-left: 1px solid var(--border);
+}
+
+.rail.is-collapsed {
+  display: none;
 }
 
 .rail__section {
@@ -335,6 +421,7 @@ button {
 }
 
 .viewer {
+  grid-area: viewer;
   min-width: 0;
   min-height: 0;
   display: grid;
@@ -549,10 +636,15 @@ button {
 
 @media (max-width: 1240px) {
   .workspace {
-    grid-template-columns: 18rem minmax(0, 1fr);
+    grid-template-columns: var(--left-rail-width) 0.75rem minmax(0, 1fr);
+    grid-template-areas: "left left-handle viewer";
   }
 
   .rail--right {
+    display: none;
+  }
+
+  .panel-splitter--right {
     display: none;
   }
 }
@@ -565,6 +657,34 @@ button {
   .workspace {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(28rem, 1fr) auto;
+    grid-template-areas:
+      "left"
+      "viewer"
+      "right";
+  }
+
+  .workspace.is-left-collapsed {
+    grid-template-rows: minmax(28rem, 1fr) auto;
+    grid-template-areas:
+      "viewer"
+      "right";
+  }
+
+  .workspace.is-right-collapsed {
+    grid-template-rows: auto minmax(28rem, 1fr);
+    grid-template-areas:
+      "left"
+      "viewer";
+  }
+
+  .workspace.is-left-collapsed.is-right-collapsed {
+    grid-template-rows: minmax(28rem, 1fr);
+    grid-template-areas: "viewer";
+  }
+
+  .panel-splitter--left,
+  .panel-splitter--right {
+    display: none;
   }
 
   .rail--left {

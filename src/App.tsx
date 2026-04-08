@@ -1,9 +1,11 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { message, open } from "@tauri-apps/plugin-dialog";
 import {
+  type CSSProperties,
   startTransition,
   useEffect,
   useEffectEvent,
+  useRef,
   useState,
 } from "react";
 import { PhotoStage } from "./components/PhotoStage";
@@ -31,16 +33,39 @@ const DECISION_ACCENT: Record<Exclude<PhotoDecision, "unrated">, string> = {
   reject: "reject",
 };
 
+const DEFAULT_LEFT_RAIL_WIDTH = 288;
+const DEFAULT_RIGHT_RAIL_WIDTH = 256;
+const DEFAULT_TOPBAR_HEIGHT = 148;
+const MIN_LEFT_RAIL_WIDTH = 220;
+const MIN_RIGHT_RAIL_WIDTH = 220;
+const MIN_TOPBAR_HEIGHT = 108;
+const MIN_VIEWER_WIDTH = 360;
+const MIN_VIEWER_HEIGHT = 300;
+const PANEL_COLLAPSE_THRESHOLD = 84;
+const SPLITTER_SIZE = 12;
+
 function App() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [decisions, setDecisions] = useState<Record<string, PhotoDecision>>({});
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [stripFilter, setStripFilter] = useState<StripFilter>("all");
   const [showCompare, setShowCompare] = useState(false);
+  const [isTopbarCollapsed, setIsTopbarCollapsed] = useState(false);
+  const [isLeftRailCollapsed, setIsLeftRailCollapsed] = useState(false);
+  const [isRightRailCollapsed, setIsRightRailCollapsed] = useState(false);
+  const [leftRailWidth, setLeftRailWidth] = useState(DEFAULT_LEFT_RAIL_WIDTH);
+  const [rightRailWidth, setRightRailWidth] = useState(DEFAULT_RIGHT_RAIL_WIDTH);
+  const [topbarHeight, setTopbarHeight] = useState<number | null>(null);
   const [viewerState, setViewerState] = useState(DEFAULT_VIEWER_STATE);
   const [folderPath, setFolderPath] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const shellRef = useRef<HTMLElement | null>(null);
+  const topbarRef = useRef<HTMLElement | null>(null);
+  const workspaceRef = useRef<HTMLElement | null>(null);
+  const lastLeftRailWidthRef = useRef(DEFAULT_LEFT_RAIL_WIDTH);
+  const lastRightRailWidthRef = useRef(DEFAULT_RIGHT_RAIL_WIDTH);
+  const lastTopbarHeightRef = useRef(DEFAULT_TOPBAR_HEIGHT);
 
   const counts = countDecisions(photos, decisions);
   const filteredStripPhotos = photos.filter((photo) =>
@@ -59,6 +84,8 @@ function App() {
   const activeDecision = selectedPhoto
     ? resolveDecision(decisions, selectedPhoto.id)
     : "unrated";
+  const isFocusView =
+    isTopbarCollapsed && isLeftRailCollapsed && isRightRailCollapsed;
 
   const loadFolder = async () => {
     const selectedPath = await open({
@@ -199,6 +226,49 @@ function App() {
     setStripFilter("all");
   };
 
+  const toggleFocusView = () => {
+    const nextCollapsed = !isFocusView;
+    setIsTopbarCollapsed(nextCollapsed);
+    setIsLeftRailCollapsed(nextCollapsed);
+    setIsRightRailCollapsed(nextCollapsed);
+  };
+
+  const toggleTopbarCollapsed = () => {
+    if (isTopbarCollapsed) {
+      setIsTopbarCollapsed(false);
+      setTopbarHeight(lastTopbarHeightRef.current);
+      return;
+    }
+
+    if (topbarHeight) {
+      lastTopbarHeightRef.current = topbarHeight;
+    }
+
+    setIsTopbarCollapsed(true);
+  };
+
+  const toggleLeftRailCollapsed = () => {
+    if (isLeftRailCollapsed) {
+      setIsLeftRailCollapsed(false);
+      setLeftRailWidth(lastLeftRailWidthRef.current);
+      return;
+    }
+
+    lastLeftRailWidthRef.current = leftRailWidth;
+    setIsLeftRailCollapsed(true);
+  };
+
+  const toggleRightRailCollapsed = () => {
+    if (isRightRailCollapsed) {
+      setIsRightRailCollapsed(false);
+      setRightRailWidth(lastRightRailWidthRef.current);
+      return;
+    }
+
+    lastRightRailWidthRef.current = rightRailWidth;
+    setIsRightRailCollapsed(true);
+  };
+
   const adjustZoom = (factor: number) => {
     setViewerState((current) => ({
       ...current,
@@ -289,6 +359,17 @@ function App() {
   }, [handleGlobalKeyDown]);
 
   useEffect(() => {
+    if (!topbarRef.current || topbarHeight !== null) {
+      return;
+    }
+
+    const measuredHeight = Math.ceil(topbarRef.current.getBoundingClientRect().height);
+    const nextHeight = Math.max(measuredHeight, DEFAULT_TOPBAR_HEIGHT);
+    setTopbarHeight(nextHeight);
+    lastTopbarHeightRef.current = nextHeight;
+  }, [topbarHeight]);
+
+  useEffect(() => {
     if (!photos.length) {
       return;
     }
@@ -313,9 +394,150 @@ function App() {
     }
   }, [decisions, filteredStripPhotos, photos, selectedPhoto, stripFilter]);
 
+  const beginLeftRailResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (window.innerWidth <= 960) {
+      return;
+    }
+
+    const workspaceRect = workspaceRef.current?.getBoundingClientRect();
+
+    if (!workspaceRect) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const currentRightWidth = isRightRailCollapsed ? 0 : rightRailWidth;
+      const maxWidth = Math.max(
+        MIN_LEFT_RAIL_WIDTH,
+        workspaceRect.width -
+          currentRightWidth -
+          MIN_VIEWER_WIDTH -
+          SPLITTER_SIZE * 2,
+      );
+      const rawWidth = moveEvent.clientX - workspaceRect.left;
+
+      if (rawWidth <= PANEL_COLLAPSE_THRESHOLD) {
+        setIsLeftRailCollapsed(true);
+        return;
+      }
+
+      const nextWidth = clamp(rawWidth, MIN_LEFT_RAIL_WIDTH, maxWidth);
+      lastLeftRailWidthRef.current = nextWidth;
+      setIsLeftRailCollapsed(false);
+      setLeftRailWidth(nextWidth);
+    };
+
+    const onPointerUp = () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+  };
+
+  const beginRightRailResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (window.innerWidth <= 1240) {
+      return;
+    }
+
+    const workspaceRect = workspaceRef.current?.getBoundingClientRect();
+
+    if (!workspaceRect) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const currentLeftWidth = isLeftRailCollapsed ? 0 : leftRailWidth;
+      const maxWidth = Math.max(
+        MIN_RIGHT_RAIL_WIDTH,
+        workspaceRect.width -
+          currentLeftWidth -
+          MIN_VIEWER_WIDTH -
+          SPLITTER_SIZE * 2,
+      );
+      const rawWidth = workspaceRect.right - moveEvent.clientX;
+
+      if (rawWidth <= PANEL_COLLAPSE_THRESHOLD) {
+        setIsRightRailCollapsed(true);
+        return;
+      }
+
+      const nextWidth = clamp(rawWidth, MIN_RIGHT_RAIL_WIDTH, maxWidth);
+      lastRightRailWidthRef.current = nextWidth;
+      setIsRightRailCollapsed(false);
+      setRightRailWidth(nextWidth);
+    };
+
+    const onPointerUp = () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+  };
+
+  const beginTopbarResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const shellRect = shellRef.current?.getBoundingClientRect();
+
+    if (!shellRect) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const maxHeight = Math.max(
+        MIN_TOPBAR_HEIGHT,
+        shellRect.height - MIN_VIEWER_HEIGHT,
+      );
+      const rawHeight = moveEvent.clientY - shellRect.top;
+
+      if (rawHeight <= PANEL_COLLAPSE_THRESHOLD) {
+        setIsTopbarCollapsed(true);
+        return;
+      }
+
+      const nextHeight = clamp(rawHeight, MIN_TOPBAR_HEIGHT, maxHeight);
+      lastTopbarHeightRef.current = nextHeight;
+      setIsTopbarCollapsed(false);
+      setTopbarHeight(nextHeight);
+    };
+
+    const onPointerUp = () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+  };
+
+  const workspaceStyle = {
+    "--left-rail-width": `${isLeftRailCollapsed ? 0 : leftRailWidth}px`,
+    "--right-rail-width": `${isRightRailCollapsed ? 0 : rightRailWidth}px`,
+  } as CSSProperties;
+
+  const shellStyle = {
+    "--topbar-height": `${isTopbarCollapsed ? 0 : topbarHeight ?? DEFAULT_TOPBAR_HEIGHT}px`,
+  } as CSSProperties;
+
   return (
-    <main className="inspector-shell">
-      <header className="topbar">
+    <main
+      ref={shellRef}
+      className={
+        isTopbarCollapsed
+          ? "inspector-shell is-topbar-collapsed"
+          : "inspector-shell"
+      }
+      style={shellStyle}
+    >
+      <header ref={topbarRef} className="topbar">
         <div className="topbar__brand">
           <p className="topbar__eyebrow">Photo Review</p>
           <h1>Inspector</h1>
@@ -353,8 +575,34 @@ function App() {
         </div>
       </header>
 
-      <section className="workspace">
-        <aside className="rail rail--left">
+      <div
+        aria-label="Resize top panel"
+        className={
+          isTopbarCollapsed
+            ? "panel-splitter panel-splitter--top is-collapsed"
+            : "panel-splitter panel-splitter--top"
+        }
+        onDoubleClick={toggleTopbarCollapsed}
+        onPointerDown={beginTopbarResize}
+        role="separator"
+      />
+
+      <section
+        ref={workspaceRef}
+        className={[
+          "workspace",
+          isLeftRailCollapsed ? "is-left-collapsed" : "",
+          isRightRailCollapsed ? "is-right-collapsed" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        style={workspaceStyle}
+      >
+        <aside
+          className={
+            isLeftRailCollapsed ? "rail rail--left is-collapsed" : "rail rail--left"
+          }
+        >
           <div className="rail__section">
             <p className="section-label">Session</p>
             <div className="session-meta">
@@ -449,6 +697,18 @@ function App() {
           </div>
         </aside>
 
+        <div
+          aria-label="Resize left panel"
+          className={
+            isLeftRailCollapsed
+              ? "panel-splitter panel-splitter--vertical panel-splitter--left is-collapsed"
+              : "panel-splitter panel-splitter--vertical panel-splitter--left"
+          }
+          onDoubleClick={toggleLeftRailCollapsed}
+          onPointerDown={beginLeftRailResize}
+          role="separator"
+        />
+
         <section className="viewer">
           <div className="viewer__toolbar">
             <div>
@@ -463,6 +723,13 @@ function App() {
             </div>
 
             <div className="viewer__toolbar-actions">
+              <button
+                className={isFocusView ? "button is-active" : "button"}
+                onClick={toggleFocusView}
+                type="button"
+              >
+                {isFocusView ? "Restore Layout" : "Maximize View"}
+              </button>
               <button
                 className="button"
                 onClick={() => setShowCompare((current) => !current)}
@@ -536,7 +803,25 @@ function App() {
           )}
         </section>
 
-        <aside className="rail rail--right">
+        <div
+          aria-label="Resize right panel"
+          className={
+            isRightRailCollapsed
+              ? "panel-splitter panel-splitter--vertical panel-splitter--right is-collapsed"
+              : "panel-splitter panel-splitter--vertical panel-splitter--right"
+          }
+          onDoubleClick={toggleRightRailCollapsed}
+          onPointerDown={beginRightRailResize}
+          role="separator"
+        />
+
+        <aside
+          className={
+            isRightRailCollapsed
+              ? "rail rail--right is-collapsed"
+              : "rail rail--right"
+          }
+        >
           <div className="rail__section">
             <p className="section-label">Decisions</p>
             <div className="decision-grid">
