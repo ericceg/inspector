@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            os: macos
+            bundles: app,dmg
+          - platform: windows-latest
+            os: windows
+            bundles: nsis,msi
+          - platform: ubuntu-22.04
+            os: linux
+            bundles: deb,appimage
+
+    runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux system deps
+        if: matrix.os == 'linux'
+        run: bash scripts/install-tauri-linux-deps.sh
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Verify tag/version alignment
+        shell: bash
+        run: bash scripts/verify-version-alignment.sh "${GITHUB_REF_NAME#v}"
+
+      - name: Configure macOS ad-hoc signing (no notarization)
+        if: matrix.os == 'macos'
+        run: |
+          echo "Building macOS release artifacts with ad-hoc signing (APPLE_SIGNING_IDENTITY='-')."
+          echo "Apple Developer ID signing and notarization are intentionally disabled for CI prototype builds."
+
+      - name: Build and upload release artifacts
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_SIGNING_IDENTITY: "-"
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Inspector ${{ github.ref_name }}
+          releaseBody: Automated build for ${{ github.ref_name }}
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: false
