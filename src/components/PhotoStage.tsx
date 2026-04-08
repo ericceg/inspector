@@ -2,6 +2,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type SyntheticEvent,
   type MouseEvent,
   type PointerEvent,
   type WheelEvent,
@@ -42,6 +43,7 @@ export function PhotoStage({
   onViewerChange,
 }: PhotoStageProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
   const dragRef = useRef<{
     pointerId: number;
     originX: number;
@@ -74,34 +76,33 @@ export function PhotoStage({
 
   useEffect(() => {
     setNaturalSize(null);
+  }, [photo]);
 
-    if (!photo) {
+  useEffect(() => {
+    const image = imageRef.current;
+
+    if (!photo || !image || !image.complete || !image.naturalWidth || !image.naturalHeight) {
       return;
     }
 
-    let disposed = false;
-    const image = new Image();
-    image.src = photo.url;
-    image.onload = () => {
-      if (disposed) {
-        return;
-      }
-
-      setNaturalSize({
-        width: image.naturalWidth,
-        height: image.naturalHeight,
-      });
-    };
-
-    return () => {
-      disposed = true;
-    };
-  }, [photo]);
+    setNaturalSize({
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+    });
+  }, [photo, photo?.url]);
 
   const frame =
     naturalSize && viewportSize.width && viewportSize.height
       ? buildFrameMetrics(viewerState, viewportSize, naturalSize)
       : null;
+
+  const handleImageLoad = (event: SyntheticEvent<HTMLImageElement>) => {
+    const image = event.currentTarget;
+    setNaturalSize({
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+    });
+  };
 
   const applyZoom = (
     nextZoom: number,
@@ -243,32 +244,40 @@ export function PhotoStage({
         onPointerUp={clearDrag}
         onWheel={handleWheel}
       >
-        {photo && frame ? (
+        {photo ? (
           <>
             <img
               alt={photo.name}
               className="photo-stage__image"
               draggable={false}
+              onLoad={handleImageLoad}
+              ref={imageRef}
               src={photo.url}
-              style={{
-                width: `${frame.width}px`,
-                height: `${frame.height}px`,
-                transform: `translate(${frame.left}px, ${frame.top}px)`,
-              }}
+              style={
+                frame
+                  ? {
+                      width: `${frame.width}px`,
+                      height: `${frame.height}px`,
+                      transform: `translate(${frame.left}px, ${frame.top}px)`,
+                    }
+                  : { opacity: 0 }
+              }
             />
-            <div className="photo-stage__hud">
-              <span>{Math.round(frame.normalized.zoom * 100)}%</span>
-              {naturalSize ? (
-                <span>
-                  {naturalSize.width} × {naturalSize.height}
-                </span>
-              ) : null}
-            </div>
+            {frame ? (
+              <div className="photo-stage__hud">
+                <span>{Math.round(frame.normalized.zoom * 100)}%</span>
+                {naturalSize ? (
+                  <span>
+                    {naturalSize.width} × {naturalSize.height}
+                  </span>
+                ) : null}
+              </div>
+            ) : (
+              <div className="photo-stage__placeholder">
+                <p>Loading preview…</p>
+              </div>
+            )}
           </>
-        ) : photo ? (
-          <div className="photo-stage__placeholder">
-            <p>Loading preview…</p>
-          </div>
         ) : (
           <div className="photo-stage__placeholder">
             <p>Move to the second frame to compare detail side-by-side.</p>

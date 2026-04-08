@@ -36,6 +36,7 @@ function App() {
   const [decisions, setDecisions] = useState<Record<string, PhotoDecision>>({});
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [stripFilter, setStripFilter] = useState<StripFilter>("all");
+  const [showCompare, setShowCompare] = useState(false);
   const [viewerState, setViewerState] = useState(DEFAULT_VIEWER_STATE);
   const [folderPath, setFolderPath] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -99,6 +100,7 @@ function App() {
         setDecisions({});
         setSelectedIndex(0);
         setStripFilter("all");
+        setShowCompare(false);
         setViewerState(DEFAULT_VIEWER_STATE);
         setFolderPath(selectedPath);
       });
@@ -402,11 +404,23 @@ function App() {
             <div>
               <p className="section-label">Compare</p>
               <h2>
-                {selectedPhoto ? "Previous and current frame" : "Open a folder"}
+                {selectedPhoto
+                  ? showCompare && comparePhoto
+                    ? "Previous and current frame"
+                    : "Current frame"
+                  : "Open a folder"}
               </h2>
             </div>
 
             <div className="viewer__toolbar-actions">
+              <button
+                className="button"
+                onClick={() => setShowCompare((current) => !current)}
+                disabled={!comparePhoto}
+                type="button"
+              >
+                {showCompare ? "Single View" : "Compare"}
+              </button>
               <button
                 className="button"
                 onClick={() => adjustZoom(1 / 1.18)}
@@ -427,18 +441,26 @@ function App() {
           </div>
 
           {photos.length ? (
-            <div className="compare-grid">
+            <div
+              className={
+                showCompare && comparePhoto
+                  ? "compare-grid"
+                  : "compare-grid compare-grid--single"
+              }
+            >
+              {showCompare && comparePhoto ? (
+                <PhotoStage
+                  detail="Reference"
+                  label="Previous frame"
+                  photo={comparePhoto}
+                  viewerState={viewerState}
+                  onViewerChange={setViewerState}
+                />
+              ) : null}
               <PhotoStage
-                detail="Reference"
-                label={comparePhoto ? "Previous frame" : "Reference pending"}
-                photo={comparePhoto}
-                viewerState={viewerState}
-                onViewerChange={setViewerState}
-              />
-              <PhotoStage
-                detail="Active"
+                detail={showCompare && comparePhoto ? "Active" : "Selected"}
                 emphasis="primary"
-                label={selectedPhoto ? "Current frame" : "Current frame"}
+                label="Current frame"
                 photo={selectedPhoto}
                 viewerState={viewerState}
                 onViewerChange={setViewerState}
