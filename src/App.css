@@ -585,6 +585,8 @@ button {
   min-height: 20rem;
   overflow: hidden;
   background: #080b11;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .photo-stage__viewport.is-draggable {
@@ -599,9 +601,16 @@ button {
   position: absolute;
   inset: 0 auto auto 0;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
   pointer-events: none;
   border-radius: 0;
   transform-origin: top left;
+}
+
+body.is-dragging-photo-stage {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .photo-stage__status {

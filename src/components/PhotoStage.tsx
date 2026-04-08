@@ -56,6 +56,12 @@ export function PhotoStage({
   const [naturalSize, setNaturalSize] = useState<Size | null>(null);
 
   useEffect(() => {
+    return () => {
+      document.body.classList.remove("is-dragging-photo-stage");
+    };
+  }, []);
+
+  useEffect(() => {
     if (!viewportRef.current) {
       return;
     }
@@ -174,12 +180,14 @@ export function PhotoStage({
       return;
     }
 
+    event.preventDefault();
     dragRef.current = {
       pointerId: event.pointerId,
       originX: event.clientX,
       originY: event.clientY,
       startState: frame.normalized,
     };
+    document.body.classList.add("is-dragging-photo-stage");
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
@@ -188,6 +196,7 @@ export function PhotoStage({
       return;
     }
 
+    event.preventDefault();
     const fit = getFitSize(viewportSize, naturalSize);
     const scaledWidth = fit.width * dragRef.current.startState.zoom;
     const scaledHeight = fit.height * dragRef.current.startState.zoom;
@@ -212,6 +221,7 @@ export function PhotoStage({
   const clearDrag = (event: PointerEvent<HTMLDivElement>) => {
     if (dragRef.current?.pointerId === event.pointerId) {
       dragRef.current = null;
+      document.body.classList.remove("is-dragging-photo-stage");
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   };
@@ -257,6 +267,7 @@ export function PhotoStage({
               alt={photo.name}
               className="photo-stage__image"
               draggable={false}
+              onDragStart={(event) => event.preventDefault()}
               onLoad={handleImageLoad}
               ref={imageRef}
               src={photo.url}
