@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build and upload assets for
+        required: true
+        type: string
 
 jobs:
   build-release:
@@ -24,10 +30,15 @@ jobs:
     runs-on: ${{ matrix.platform }}
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Install Linux system deps
         if: matrix.os == 'linux'
@@ -52,7 +63,7 @@ jobs:
 
       - name: Verify tag/version alignment
         shell: bash
-        run: bash scripts/verify-version-alignment.sh "${GITHUB_REF_NAME#v}"
+        run: bash scripts/verify-version-alignment.sh "${RELEASE_VERSION#v}"
 
       - name: Configure macOS ad-hoc signing (no notarization)
         if: matrix.os == 'macos'
@@ -66,9 +77,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_SIGNING_IDENTITY: "-"
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: Inspector ${{ github.ref_name }}
-          releaseBody: Automated build for ${{ github.ref_name }}
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: Inspector ${{ env.RELEASE_TAG }}
+          releaseBody: Automated build for ${{ env.RELEASE_TAG }}
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: false
