@@ -238,7 +238,7 @@ function App() {
     }
 
     const selectedPath = await open({
-      title: "Choose an export destination",
+      title: "Choose a destination for moved photos",
       directory: true,
       multiple: false,
     });
@@ -259,12 +259,29 @@ function App() {
         destinationRoot: selectedPath,
         decisions: exportPayload,
       });
+      const rescanned = await invoke<BackendPhoto[]>("scan_photo_directory", {
+        path: summary.destinationRoot,
+      });
+      const nextPhotos = rescanned.map((photo) => ({
+        ...photo,
+        url: convertFileSrc(photo.previewPath),
+      }));
 
       setLastExportPath(summary.destinationRoot);
+      startTransition(() => {
+        setPhotos(nextPhotos);
+        setDecisions({});
+        setSelectedIndex(0);
+        setStripFilter("all");
+        setShowCompare(false);
+        setViewerState(DEFAULT_VIEWER_STATE);
+        setFolderPath(summary.destinationRoot);
+        setLoadError("");
+      });
       await message(
-        `Copied ${summary.exportedCount} photos into pick, hold, reject, and unrated folders.\n\n${formatDecisionSummary(counts)}\n\nDestination:\n${summary.destinationRoot}`,
+        `Moved ${summary.exportedCount} photos into pick, hold, reject, and unrated folders.\n\n${formatDecisionSummary(counts)}\n\nDestination:\n${summary.destinationRoot}`,
         {
-          title: "Export complete",
+          title: "Move complete",
           kind: "info",
         },
       );
@@ -634,7 +651,7 @@ function App() {
             disabled={!photos.length || isExporting}
             type="button"
           >
-            {isExporting ? "Exporting…" : "Export Folders"}
+            {isExporting ? "Moving…" : "Move To Folders"}
           </button>
         </div>
       </header>
@@ -682,7 +699,7 @@ function App() {
             ) : null}
             {lastExportPath ? (
               <p className="session-note" title={lastExportPath}>
-                Last export: {lastExportPath}
+                Last move: {lastExportPath}
               </p>
             ) : null}
             {loadError ? <p className="session-error">{loadError}</p> : null}

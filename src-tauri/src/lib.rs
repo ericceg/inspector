@@ -153,9 +153,9 @@ fn export_photos_by_decision(
             })?;
         }
 
-        fs::copy(&source_path, &target_path).map_err(|error| {
+        move_file(&source_path, &target_path).map_err(|error| {
             format!(
-                "Could not copy {} to {}: {error}",
+                "Could not move {} to {}: {error}",
                 source_path.display(),
                 target_path.display()
             )
@@ -184,6 +184,21 @@ fn decision_folder_name(decision: &str) -> Result<&'static str, String> {
         "reject" => Ok("reject"),
         "unrated" => Ok("unrated"),
         other => Err(format!("Unsupported decision '{other}'.")),
+    }
+}
+
+fn move_file(source: &Path, destination: &Path) -> Result<(), std::io::Error> {
+    if destination.exists() {
+        fs::remove_file(destination)?;
+    }
+
+    match fs::rename(source, destination) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            fs::copy(source, destination)?;
+            fs::remove_file(source)?;
+            Ok(())
+        }
     }
 }
 
