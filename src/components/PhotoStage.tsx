@@ -7,7 +7,7 @@ import {
   type PointerEvent,
   type WheelEvent,
 } from "react";
-import type { Photo, PhotoDecision, ViewerState } from "../types";
+import type { Photo, PhotoDecision, PhotoMetadataValue, ViewerState } from "../types";
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 12;
@@ -30,6 +30,7 @@ type PhotoStageProps = {
   decision: PhotoDecision;
   emphasis?: "primary" | "secondary";
   label: string;
+  overlayMetadata?: PhotoMetadataValue[];
   photo: Photo | null;
   viewerState: ViewerState;
   onViewerChange: (next: ViewerState) => void;
@@ -40,6 +41,7 @@ export function PhotoStage({
   decision,
   emphasis = "secondary",
   label,
+  overlayMetadata,
   photo,
   viewerState,
   onViewerChange,
@@ -259,9 +261,21 @@ export function PhotoStage({
         {photo ? (
           <>
             <div className="photo-stage__status">
-              <span className={`decision-chip decision-chip--${decision} decision-chip--overlay`}>
-                {decision}
-              </span>
+              <div className="photo-stage__overlay">
+                <span className={`decision-chip decision-chip--${decision} decision-chip--overlay`}>
+                  {decision}
+                </span>
+                {overlayMetadata?.length ? (
+                  <div className="photo-stage__meta">
+                    {overlayMetadata.map((item) => (
+                      <div className="photo-stage__meta-row" key={`${item.label}:${item.value}`}>
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
             <img
               alt={photo.name}

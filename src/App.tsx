@@ -113,6 +113,9 @@ function App() {
   const selectedPhotoMetadata = selectedPhoto
     ? metadataByPhotoId[selectedPhoto.id]
     : undefined;
+  const comparePhotoMetadata = comparePhoto
+    ? metadataByPhotoId[comparePhoto.id]
+    : undefined;
   const selectedPhotoMetadataError = selectedPhoto
     ? metadataErrorsByPhotoId[selectedPhoto.id] ?? ""
     : "";
@@ -573,12 +576,18 @@ function App() {
   }, [decisions, filteredStripPhotos, photos, selectedPhoto, stripFilter]);
 
   useEffect(() => {
-    if (!showImageValues || !selectedPhoto) {
+    if (!showImageValues) {
       return;
     }
 
-    void loadPhotoMetadata(selectedPhoto);
-  }, [loadPhotoMetadata, selectedPhoto, showImageValues]);
+    if (selectedPhoto) {
+      void loadPhotoMetadata(selectedPhoto);
+    }
+
+    if (comparePhoto) {
+      void loadPhotoMetadata(comparePhoto);
+    }
+  }, [comparePhoto, loadPhotoMetadata, selectedPhoto, showImageValues]);
 
   useLayoutEffect(() => {
     if (isLeftRailCollapsed) {
@@ -1035,6 +1044,7 @@ function App() {
                   detail="Reference"
                   decision={compareDecision}
                   label="Previous frame"
+                  overlayMetadata={showImageValues ? pickStageOverlayMetadata(comparePhotoMetadata) : undefined}
                   photo={comparePhoto}
                   viewerState={viewerState}
                   onViewerChange={setViewerState}
@@ -1045,6 +1055,7 @@ function App() {
                 decision={activeDecision}
                 emphasis="primary"
                 label="Current frame"
+                overlayMetadata={showImageValues ? pickStageOverlayMetadata(selectedPhotoMetadata) : undefined}
                 photo={selectedPhoto}
                 viewerState={viewerState}
                 onViewerChange={setViewerState}
@@ -1246,6 +1257,17 @@ function countDecisions(
     },
     { pick: 0, hold: 0, reject: 0, unrated: 0 },
   );
+}
+
+function pickStageOverlayMetadata(metadata: PhotoMetadataValue[] | undefined) {
+  if (!metadata?.length) {
+    return undefined;
+  }
+
+  const labels = new Set(["ISO", "Aperture", "Shutter"]);
+  const overlayValues = metadata.filter((item) => labels.has(item.label));
+
+  return overlayValues.length ? overlayValues : undefined;
 }
 
 function matchesFilter(decision: PhotoDecision, filter: StripFilter) {
