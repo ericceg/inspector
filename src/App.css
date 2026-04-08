@@ -24,6 +24,7 @@
   --pick: #15803d;
   --hold: #a16207;
   --reject: #dc2626;
+  --unrated: #64748b;
 }
 
 html,
@@ -411,6 +412,7 @@ button {
 }
 
 .filmstrip__item {
+  --decision-color: var(--unrated);
   display: grid;
   grid-template-columns: 5.4rem minmax(0, 1fr) auto;
   gap: 0.7rem;
@@ -422,9 +424,30 @@ button {
   cursor: pointer;
   color: inherit;
   text-align: left;
+  box-shadow: inset 0.28rem 0 0 var(--decision-color);
   transition:
     border-color 160ms ease,
-    background-color 160ms ease;
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.filmstrip__item--pick {
+  --decision-color: var(--pick);
+  border-color: rgba(21, 128, 61, 0.2);
+}
+
+.filmstrip__item--hold {
+  --decision-color: var(--hold);
+  border-color: rgba(161, 98, 7, 0.2);
+}
+
+.filmstrip__item--reject {
+  --decision-color: var(--reject);
+  border-color: rgba(220, 38, 38, 0.2);
+}
+
+.filmstrip__item--unrated {
+  --decision-color: var(--unrated);
 }
 
 .filmstrip__item.is-selected {
@@ -437,6 +460,24 @@ button {
   overflow: hidden;
   border-radius: 0;
   background: var(--surface-2);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  box-sizing: border-box;
+}
+
+.filmstrip__item--pick .filmstrip__thumb {
+  border-color: rgba(21, 128, 61, 0.34);
+}
+
+.filmstrip__item--hold .filmstrip__thumb {
+  border-color: rgba(161, 98, 7, 0.34);
+}
+
+.filmstrip__item--reject .filmstrip__thumb {
+  border-color: rgba(220, 38, 38, 0.34);
+}
+
+.filmstrip__item--unrated .filmstrip__thumb {
+  border-color: rgba(100, 116, 139, 0.32);
 }
 
 .filmstrip__thumb img {
@@ -464,35 +505,6 @@ button {
 .filmstrip__meta span {
   color: var(--text-muted);
   font-size: 0.86rem;
-}
-
-.decision-dot {
-  inline-size: 0.65rem;
-  block-size: 0.65rem;
-  border-radius: 1px;
-  background: #cbd5e1;
-}
-
-.decision-dot--pick,
-.decision-tag--pick {
-  background: rgba(21, 128, 61, 0.1);
-  color: var(--pick);
-}
-
-.decision-dot--hold,
-.decision-tag--hold {
-  background: rgba(161, 98, 7, 0.12);
-  color: var(--hold);
-}
-
-.decision-dot--reject,
-.decision-tag--reject {
-  background: rgba(220, 38, 38, 0.1);
-  color: var(--reject);
-}
-
-.decision-dot--unrated {
-  background: #cbd5e1;
 }
 
 .viewer {
@@ -592,6 +604,14 @@ button {
   transform-origin: top left;
 }
 
+.photo-stage__status {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 1;
+  pointer-events: none;
+}
+
 .photo-stage__hud {
   position: absolute;
   right: 1rem;
@@ -687,14 +707,73 @@ button {
   border-color: rgba(220, 38, 38, 0.22);
 }
 
+.decision-chip,
 .decision-tag {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.35rem 0.6rem;
+  padding: 0.35rem 0.65rem;
   border-radius: 2px;
-  background: var(--surface-2);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(100, 116, 139, 0.12);
+  color: var(--unrated);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   text-transform: capitalize;
+}
+
+.decision-chip {
+  justify-self: end;
+  min-width: 4.9rem;
+}
+
+.decision-swatch {
+  inline-size: 0.72rem;
+  block-size: 0.72rem;
+  justify-self: end;
+  border-radius: 2px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  background: rgba(100, 116, 139, 0.2);
+  box-sizing: border-box;
+}
+
+.decision-chip--overlay {
+  background: rgba(8, 11, 17, 0.84);
+  box-shadow: 0 0.55rem 1.5rem rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
+}
+
+.decision-chip--pick,
+.decision-tag--pick,
+.decision-swatch--pick {
+  background: rgba(21, 128, 61, 0.1);
+  border-color: rgba(21, 128, 61, 0.24);
+  color: var(--pick);
+}
+
+.decision-chip--hold,
+.decision-tag--hold,
+.decision-swatch--hold {
+  background: rgba(161, 98, 7, 0.12);
+  border-color: rgba(161, 98, 7, 0.24);
+  color: var(--hold);
+}
+
+.decision-chip--reject,
+.decision-tag--reject,
+.decision-swatch--reject {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: rgba(220, 38, 38, 0.24);
+  color: var(--reject);
+}
+
+.decision-chip--unrated,
+.decision-tag--unrated,
+.decision-swatch--unrated {
+  background: rgba(100, 116, 139, 0.12);
+  border-color: rgba(100, 116, 139, 0.24);
+  color: var(--unrated);
 }
 
 .detail-list,

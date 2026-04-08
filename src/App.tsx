@@ -32,10 +32,11 @@ const FILTERS: Array<{ value: StripFilter; label: string }> = [
   { value: "unrated", label: "Unrated" },
 ];
 
-const DECISION_ACCENT: Record<Exclude<PhotoDecision, "unrated">, string> = {
-  pick: "pick",
-  hold: "hold",
-  reject: "reject",
+const DECISION_LABELS: Record<PhotoDecision, string> = {
+  pick: "Pick",
+  hold: "Hold",
+  reject: "Reject",
+  unrated: "Unrated",
 };
 
 const DEFAULT_LEFT_RAIL_WIDTH = 288;
@@ -89,6 +90,9 @@ function App() {
     selectedNavigableIndex > 0
       ? navigablePhotos[selectedNavigableIndex - 1]
       : null;
+  const compareDecision = comparePhoto
+    ? resolveDecision(decisions, comparePhoto.id)
+    : "unrated";
   const activeDecision = selectedPhoto
     ? resolveDecision(decisions, selectedPhoto.id)
     : "unrated";
@@ -789,11 +793,13 @@ function App() {
                   return (
                     <button
                       key={photo.id}
-                      className={
-                        isSelected
-                          ? "filmstrip__item is-selected"
-                          : "filmstrip__item"
-                      }
+                      className={[
+                        "filmstrip__item",
+                        `filmstrip__item--${decision}`,
+                        isSelected ? "is-selected" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                       onClick={() =>
                         setSelectedIndex(
                           photos.findIndex((entry) => entry.id === photo.id),
@@ -816,8 +822,9 @@ function App() {
                       </div>
 
                       <span
-                        className={`decision-dot decision-dot--${decision}`}
-                        aria-label={decision}
+                        className={`decision-swatch decision-swatch--${decision}`}
+                        aria-label={`Status: ${DECISION_LABELS[decision]}`}
+                        title={DECISION_LABELS[decision]}
                       />
                     </button>
                   );
@@ -902,6 +909,7 @@ function App() {
               {showCompare && comparePhoto ? (
                 <PhotoStage
                   detail="Reference"
+                  decision={compareDecision}
                   label="Previous frame"
                   photo={comparePhoto}
                   viewerState={viewerState}
@@ -910,6 +918,7 @@ function App() {
               ) : null}
               <PhotoStage
                 detail={showCompare && comparePhoto ? "Active" : "Selected"}
+                decision={activeDecision}
                 emphasis="primary"
                 label="Current frame"
                 photo={selectedPhoto}
@@ -999,14 +1008,8 @@ function App() {
                 </div>
                 <div className="detail-list__row">
                   <span>Status</span>
-                  <strong
-                    className={
-                      activeDecision === "unrated"
-                        ? "decision-tag"
-                        : `decision-tag decision-tag--${DECISION_ACCENT[activeDecision]}`
-                    }
-                  >
-                    {activeDecision}
+                  <strong className={`decision-tag decision-tag--${activeDecision}`}>
+                    {DECISION_LABELS[activeDecision]}
                   </strong>
                 </div>
                 <div className="detail-list__row">

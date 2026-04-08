@@ -7,7 +7,7 @@ import {
   type PointerEvent,
   type WheelEvent,
 } from "react";
-import type { Photo, ViewerState } from "../types";
+import type { Photo, PhotoDecision, ViewerState } from "../types";
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 12;
@@ -27,6 +27,7 @@ type FrameMetrics = {
 
 type PhotoStageProps = {
   detail: string;
+  decision: PhotoDecision;
   emphasis?: "primary" | "secondary";
   label: string;
   photo: Photo | null;
@@ -36,6 +37,7 @@ type PhotoStageProps = {
 
 export function PhotoStage({
   detail,
+  decision,
   emphasis = "secondary",
   label,
   photo,
@@ -246,6 +248,11 @@ export function PhotoStage({
       >
         {photo ? (
           <>
+            <div className="photo-stage__status">
+              <span className={`decision-chip decision-chip--${decision} decision-chip--overlay`}>
+                {decision}
+              </span>
+            </div>
             <img
               alt={photo.name}
               className="photo-stage__image"
