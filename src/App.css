@@ -177,6 +177,10 @@ button {
   gap: 0.8rem;
 }
 
+.viewer__toolbar-actions {
+  gap: 0.55rem;
+}
+
 .button {
   appearance: none;
   cursor: pointer;
@@ -192,6 +196,11 @@ button {
     border-color 160ms ease,
     background-color 160ms ease,
     color 160ms ease;
+}
+
+.viewer__toolbar-actions .button {
+  padding: 0.58rem 0.8rem;
+  font-size: 0.94rem;
 }
 
 .button:hover:not(:disabled),
