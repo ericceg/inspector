@@ -12,6 +12,8 @@ import { PhotoStage } from "./components/PhotoStage";
 import {
   type BackendPhoto,
   type DecisionCounts,
+  type ExportPhotoDecision,
+  type ExportSummary,
   type Photo,
   type PhotoDecision,
   type StripFilter,
@@ -59,7 +61,9 @@ function App() {
   const [viewerState, setViewerState] = useState(DEFAULT_VIEWER_STATE);
   const [folderPath, setFolderPath] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [lastExportPath, setLastExportPath] = useState("");
   const shellRef = useRef<HTMLElement | null>(null);
   const topbarRef = useRef<HTMLElement | null>(null);
   const workspaceRef = useRef<HTMLElement | null>(null);
@@ -114,6 +118,7 @@ function App() {
         setSelectedIndex(0);
         setFolderPath(selectedPath);
         setViewerState(DEFAULT_VIEWER_STATE);
+        setLastExportPath("");
         setLoadError("No viewable photos were found in that folder.");
         await message(
           "No supported photos or RAW files were found in the selected folder.",
@@ -138,6 +143,7 @@ function App() {
         setShowCompare(false);
         setViewerState(DEFAULT_VIEWER_STATE);
         setFolderPath(selectedPath);
+        setLastExportPath("");
       });
     } catch (error) {
       const nextError =
@@ -224,6 +230,54 @@ function App() {
   const clearAllDecisions = () => {
     setDecisions({});
     setStripFilter("all");
+  };
+
+  const exportByDecision = async () => {
+    if (!photos.length || !folderPath) {
+      return;
+    }
+
+    const selectedPath = await open({
+      title: "Choose an export destination",
+      directory: true,
+      multiple: false,
+    });
+
+    if (typeof selectedPath !== "string") {
+      return;
+    }
+
+    setIsExporting(true);
+
+    try {
+      const exportPayload: ExportPhotoDecision[] = photos.map((photo) => ({
+        path: photo.path,
+        decision: resolveDecision(decisions, photo.id),
+      }));
+      const summary = await invoke<ExportSummary>("export_photos_by_decision", {
+        sourceRoot: folderPath,
+        destinationRoot: selectedPath,
+        decisions: exportPayload,
+      });
+
+      setLastExportPath(summary.destinationRoot);
+      await message(
+        `Copied ${summary.exportedCount} photos into pick, hold, reject, and unrated folders.\n\n${formatDecisionSummary(counts)}\n\nDestination:\n${summary.destinationRoot}`,
+        {
+          title: "Export complete",
+          kind: "info",
+        },
+      );
+    } catch (error) {
+      const nextError =
+        error instanceof Error ? error.message : "The export could not be completed.";
+      await message(nextError, {
+        title: "Export failed",
+        kind: "error",
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const toggleFocusView = () => {
@@ -574,6 +628,14 @@ function App() {
           >
             Reset Ratings
           </button>
+          <button
+            className="button"
+            onClick={() => void exportByDecision()}
+            disabled={!photos.length || isExporting}
+            type="button"
+          >
+            {isExporting ? "Exporting…" : "Export Folders"}
+          </button>
         </div>
       </header>
 
@@ -616,6 +678,11 @@ function App() {
             {folderPath ? (
               <p className="session-path" title={folderPath}>
                 {folderPath}
+              </p>
+            ) : null}
+            {lastExportPath ? (
+              <p className="session-note" title={lastExportPath}>
+                Last export: {lastExportPath}
               </p>
             ) : null}
             {loadError ? <p className="session-error">{loadError}</p> : null}
@@ -1016,6 +1083,19 @@ function findNextSelectionId({
 function summarizePath(path: string) {
   const parts = path.split(/[/\\]/).filter(Boolean);
   return parts.slice(-2).join(" / ") || path;
+}
+
+function formatDecisionSummary(counts: DecisionCounts) {
+  const labels: Array<[PhotoDecision, string]> = [
+    ["pick", "pick"],
+    ["hold", "hold"],
+    ["reject", "reject"],
+    ["unrated", "unrated"],
+  ];
+
+  return labels
+    .map(([decision, label]) => `${counts[decision]} ${label}`)
+    .join(" • ");
 }
 
 export default App;

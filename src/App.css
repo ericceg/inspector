@@ -321,6 +321,7 @@ button {
 }
 
 .session-path,
+.session-note,
 .session-error,
 .muted-copy {
   margin: 0;

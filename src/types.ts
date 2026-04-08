@@ -23,6 +23,16 @@ export type Photo = BackendPhoto & {
 
 export type DecisionCounts = Record<PhotoDecision, number>;
 
+export type ExportPhotoDecision = {
+  path: string;
+  decision: PhotoDecision;
+};
+
+export type ExportSummary = {
+  destinationRoot: string;
+  exportedCount: number;
+};
+
 export const DEFAULT_VIEWER_STATE: ViewerState = {
   zoom: 1,
   centerX: 0.5,
