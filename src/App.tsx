@@ -81,7 +81,7 @@ function App() {
         setViewerState(DEFAULT_VIEWER_STATE);
         setLoadError("No viewable photos were found in that folder.");
         await message(
-          "No JPEG, PNG, TIFF, WebP, GIF, AVIF, or HEIC images were found in the selected folder.",
+          "No supported photos or RAW files were found in the selected folder.",
           {
             title: "Nothing to review",
             kind: "warning",
@@ -92,7 +92,7 @@ function App() {
 
       const nextPhotos = scanned.map((photo) => ({
         ...photo,
-        url: convertFileSrc(photo.path),
+        url: convertFileSrc(photo.previewPath),
       }));
 
       startTransition(() => {

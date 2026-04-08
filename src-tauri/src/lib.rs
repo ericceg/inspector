@@ -1,5 +1,12 @@
 use serde::Serialize;
-use std::path::{Path, PathBuf};
+use std::{
+    collections::hash_map::DefaultHasher,
+    fs,
+    hash::{Hash, Hasher},
+    path::{Path, PathBuf},
+    process::Command,
+    time::UNIX_EPOCH,
+};
 use walkdir::WalkDir;
 
 #[derive(Debug, Serialize)]
@@ -10,6 +17,7 @@ struct PhotoEntry {
     name: String,
     extension: String,
     directory: String,
+    preview_path: String,
 }
 
 #[tauri::command]
@@ -37,11 +45,8 @@ fn scan_photo_directory(path: String) -> Result<Vec<PhotoEntry>, String> {
                 return None;
             }
 
-            let canonical = path
-                .canonicalize()
-                .unwrap_or_else(|_| path.to_path_buf())
-                .to_string_lossy()
-                .to_string();
+            let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+            let canonical = canonical_path.to_string_lossy().to_string();
 
             let directory = path
                 .parent()
@@ -55,12 +60,21 @@ fn scan_photo_directory(path: String) -> Result<Vec<PhotoEntry>, String> {
                 .unwrap_or_default()
                 .to_ascii_lowercase();
 
+            let preview_path = match resolve_preview_path(&canonical_path, &extension) {
+                Ok(preview_path) => preview_path,
+                Err(error) => {
+                    eprintln!("Skipping {}: {}", canonical_path.display(), error);
+                    return None;
+                }
+            };
+
             Some(PhotoEntry {
                 id: canonical.clone(),
                 path: canonical,
                 name: file_name,
                 extension,
                 directory,
+                preview_path,
             })
         })
         .collect();
@@ -75,26 +89,167 @@ fn scan_photo_directory(path: String) -> Result<Vec<PhotoEntry>, String> {
 }
 
 fn is_supported_photo(path: &Path) -> bool {
+    path.extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase())
+        .is_some_and(|extension| {
+            is_browser_viewable_extension(&extension) || is_raw_extension(&extension)
+        })
+}
+
+fn is_browser_viewable_extension(extension: &str) -> bool {
     matches!(
-        path.extension()
-            .and_then(|value| value.to_str())
-            .map(|value| value.to_ascii_lowercase()),
-        Some(extension)
-            if matches!(
-                extension.as_str(),
-                "jpg"
-                    | "jpeg"
-                    | "png"
-                    | "tif"
-                    | "tiff"
-                    | "webp"
-                    | "gif"
-                    | "avif"
-                    | "heic"
-                    | "heif"
-                    | "bmp"
-            )
+        extension,
+        "jpg" | "jpeg" | "png" | "tif" | "tiff" | "webp" | "gif" | "avif" | "heic" | "heif" | "bmp"
     )
+}
+
+fn is_raw_extension(extension: &str) -> bool {
+    matches!(
+        extension,
+        "cr2"
+            | "cr3"
+            | "nef"
+            | "nrw"
+            | "arw"
+            | "sr2"
+            | "orf"
+            | "rw2"
+            | "raf"
+            | "dng"
+            | "pef"
+            | "raw"
+    )
+}
+
+fn resolve_preview_path(path: &Path, extension: &str) -> Result<String, String> {
+    if is_browser_viewable_extension(extension) {
+        return Ok(path.to_string_lossy().to_string());
+    }
+
+    let preview_path = build_preview_cache_path(path, extension)?;
+
+    if !preview_path.is_file() {
+        generate_raw_preview(path, &preview_path)?;
+    }
+
+    Ok(preview_path.to_string_lossy().to_string())
+}
+
+fn build_preview_cache_path(path: &Path, extension: &str) -> Result<PathBuf, String> {
+    let metadata =
+        fs::metadata(path).map_err(|error| format!("Could not inspect the file: {error}"))?;
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+        .map(|value| value.as_nanos())
+        .unwrap_or_default();
+
+    let mut hasher = DefaultHasher::new();
+    path.to_string_lossy().hash(&mut hasher);
+    metadata.len().hash(&mut hasher);
+    modified.hash(&mut hasher);
+    extension.hash(&mut hasher);
+
+    let cache_root = std::env::temp_dir().join("inspector-raw-previews");
+    fs::create_dir_all(&cache_root)
+        .map_err(|error| format!("Could not create the RAW preview cache: {error}"))?;
+
+    Ok(cache_root.join(format!("{:016x}.jpg", hasher.finish())))
+}
+
+#[cfg(target_os = "macos")]
+fn generate_raw_preview(path: &Path, preview_path: &Path) -> Result<(), String> {
+    if render_raw_with_sips(path, preview_path) || render_raw_with_quicklook(path, preview_path) {
+        return Ok(());
+    }
+
+    Err("No macOS RAW preview renderer could decode this file.".into())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn generate_raw_preview(_path: &Path, _preview_path: &Path) -> Result<(), String> {
+    Err(format!(
+        "RAW preview generation is not implemented on {} yet.",
+        std::env::consts::OS
+    ))
+}
+
+#[cfg(target_os = "macos")]
+fn render_raw_with_sips(path: &Path, preview_path: &Path) -> bool {
+    matches!(
+        Command::new("sips")
+            .args(["-s", "format", "jpeg"])
+            .arg(path)
+            .args(["--out"])
+            .arg(preview_path)
+            .status(),
+        Ok(status) if status.success() && preview_path.is_file()
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn render_raw_with_quicklook(path: &Path, preview_path: &Path) -> bool {
+    let render_dir = preview_path.with_extension("quicklook");
+
+    if render_dir.exists() && fs::remove_dir_all(&render_dir).is_err() {
+        return false;
+    }
+
+    if fs::create_dir_all(&render_dir).is_err() {
+        return false;
+    }
+
+    let rendered = Command::new("qlmanage")
+        .args(["-t", "-s", "4096", "-o"])
+        .arg(&render_dir)
+        .arg(path)
+        .status()
+        .ok()
+        .filter(|status| status.success())
+        .and_then(|_| {
+            fs::read_dir(&render_dir)
+                .ok()?
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .find(|candidate| candidate.is_file())
+        });
+
+    let success = rendered
+        .as_ref()
+        .is_some_and(|rendered_file| copy_preview_into_place(rendered_file, preview_path).is_ok());
+
+    let _ = fs::remove_dir_all(&render_dir);
+
+    success
+}
+
+#[cfg(target_os = "macos")]
+fn copy_preview_into_place(source: &Path, destination: &Path) -> Result<(), std::io::Error> {
+    let extension = source
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase());
+
+    if matches!(extension.as_deref(), Some("jpg" | "jpeg")) {
+        fs::copy(source, destination)?;
+        return Ok(());
+    }
+
+    let converted = Command::new("sips")
+        .args(["-s", "format", "jpeg"])
+        .arg(source)
+        .args(["--out"])
+        .arg(destination)
+        .status()?;
+
+    if converted.success() && destination.is_file() {
+        return Ok(());
+    }
+
+    fs::copy(source, destination)?;
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

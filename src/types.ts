@@ -14,6 +14,7 @@ export type BackendPhoto = {
   name: string;
   extension: string;
   directory: string;
+  previewPath: string;
 };
 
 export type Photo = BackendPhoto & {
