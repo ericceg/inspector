@@ -6,6 +6,7 @@ import {
   startTransition,
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -72,6 +73,8 @@ function App() {
   const shellRef = useRef<HTMLElement | null>(null);
   const topbarRef = useRef<HTMLElement | null>(null);
   const workspaceRef = useRef<HTMLElement | null>(null);
+  const filmstripRef = useRef<HTMLDivElement | null>(null);
+  const selectedFilmstripItemRef = useRef<HTMLButtonElement | null>(null);
   const lastLeftRailWidthRef = useRef(DEFAULT_LEFT_RAIL_WIDTH);
   const lastRightRailWidthRef = useRef(DEFAULT_RIGHT_RAIL_WIDTH);
   const lastTopbarHeightRef = useRef(DEFAULT_TOPBAR_HEIGHT);
@@ -486,6 +489,35 @@ function App() {
     }
   }, [decisions, filteredStripPhotos, photos, selectedPhoto, stripFilter]);
 
+  useLayoutEffect(() => {
+    if (isLeftRailCollapsed) {
+      return;
+    }
+
+    const filmstrip = filmstripRef.current;
+    const selectedItem = selectedFilmstripItemRef.current;
+
+    if (!filmstrip || !selectedItem) {
+      return;
+    }
+
+    const filmstripRect = filmstrip.getBoundingClientRect();
+    const selectedRect = selectedItem.getBoundingClientRect();
+    const selectedTop =
+      selectedRect.top - filmstripRect.top + filmstrip.scrollTop;
+    const centeredTop =
+      selectedTop - (filmstrip.clientHeight - selectedItem.offsetHeight) / 2;
+    const maxScrollTop = Math.max(0, filmstrip.scrollHeight - filmstrip.clientHeight);
+
+    const nextTop =
+      clamp(centeredTop, 0, maxScrollTop);
+
+    filmstrip.scrollTo({
+      top: nextTop,
+      behavior: "auto",
+    });
+  }, [filteredStripPhotos.length, isLeftRailCollapsed, selectedPhoto?.id, stripFilter]);
+
   const beginLeftRailResize = (event: React.PointerEvent<HTMLDivElement>) => {
     if (window.innerWidth <= 960) {
       return;
@@ -785,13 +817,14 @@ function App() {
             </div>
 
             {filteredStripPhotos.length ? (
-              <div className="filmstrip">
+              <div ref={filmstripRef} className="filmstrip">
                 {filteredStripPhotos.map((photo) => {
                   const decision = resolveDecision(decisions, photo.id);
                   const isSelected = photo.id === selectedPhoto?.id;
 
                   return (
                     <button
+                      ref={isSelected ? selectedFilmstripItemRef : null}
                       key={photo.id}
                       className={[
                         "filmstrip__item",
