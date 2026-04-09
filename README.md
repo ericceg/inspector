@@ -9,6 +9,11 @@
 [![Version](https://img.shields.io/badge/version-v0.1.1-green)](https://github.com/ericceg/inspector/releases/latest)
 
 
+<p align="center">
+   <img src="assets/Inspector.svg" alt="Inspector" width="250">
+</p>
+
+
 **Lightweight photo reviewer for fast Tinder-style culling with a locked zoom.** Open a folder, zoom into the detail you care about, then move through the set without resetting the view.
 Do the whole selection process just using the keyboard, and when you're done, have your picks automatically organized into subfolders. 
 
