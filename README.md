@@ -10,7 +10,7 @@
 
 
 <p align="center">
-   <img src="assets/Inspector.svg" alt="Inspector" width="250">
+   <img src="assets/inspector.svg" alt="Inspector" width="250">
 </p>
 
 
