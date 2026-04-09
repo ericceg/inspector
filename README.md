@@ -15,7 +15,7 @@
 
 
 **Lightweight photo reviewer for fast Tinder-style culling with a locked zoom.** Open a folder, zoom into the detail you care about, then move through the set without resetting the view.
-Do the whole selection process just using the keyboard, and when you're done, have your picks automatically organized into subfolders. 
+Do the whole selection process just using the keyboard while Inspector sorts files into `pick`, `hold`, and `reject` folders in real time.
 
 ## Installation
 
@@ -85,8 +85,10 @@ npm run tauri build
 
 ## Notes
 
-- Ratings are session-local until you run **Organize By Rating**.
-- Organizing moves files inside the loaded folder and preserves nested folder structure under `pick`, `hold`, `reject`, and `unrated`.
+- Ratings are persisted immediately by moving files inside the loaded folder.
+- Reopening a folder that already contains `pick`, `hold`, or `reject` subfolders restores those ratings automatically so you can continue later.
+- Clearing a rating moves the file back out of the decision folders into the loaded folder tree.
+- Nested folder structure is preserved underneath `pick`, `hold`, and `reject`.
 - RAW preview generation is implemented on macOS; other platforms can still review browser-viewable image formats.
 - Preview JPEGs for RAW files are cached under your system temp directory.
 

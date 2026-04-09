@@ -20,6 +20,7 @@ export type BackendPhoto = {
   extension: string;
   directory: string;
   previewPath: string;
+  decision: PhotoDecision;
 };
 
 export type Photo = BackendPhoto & {
@@ -28,7 +29,7 @@ export type Photo = BackendPhoto & {
 
 export type DecisionCounts = Record<PhotoDecision, number>;
 
-export type ExportPhotoDecision = {
+export type MovePhotoDecision = {
   path: string;
   decision: PhotoDecision;
 };
@@ -36,19 +37,13 @@ export type ExportPhotoDecision = {
 export type MovedPhoto = {
   sourcePath: string;
   destinationPath: string;
+  decision: PhotoDecision;
 };
 
-export type ExportSummary = {
+export type MoveSummary = {
   destinationRoot: string;
-  exportedCount: number;
+  movedCount: number;
   movedPhotos: MovedPhoto[];
-};
-
-export type ExportProgress = {
-  processedCount: number;
-  totalCount: number;
-  currentName: string;
-  currentDecision: PhotoDecision;
 };
 
 export const DEFAULT_VIEWER_STATE: ViewerState = {

@@ -340,46 +340,6 @@ button {
   color: #ffb0a6;
 }
 
-.export-progress {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  padding: 0.75rem;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-}
-
-.export-progress__meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  font-size: 0.92rem;
-}
-
-.export-progress__track {
-  position: relative;
-  overflow: hidden;
-  height: 0.5rem;
-  background: rgba(148, 163, 184, 0.2);
-}
-
-.export-progress__fill {
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, #2563eb 0%, #60a5fa 100%);
-  transition: width 120ms linear;
-}
-
-.export-progress__label {
-  margin: 0;
-  font-size: 0.86rem;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .filter-row {
   display: flex;
   flex-wrap: wrap;

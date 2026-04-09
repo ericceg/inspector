@@ -10,7 +10,6 @@ use std::{
     process::Command,
     time::UNIX_EPOCH,
 };
-use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
 
 #[derive(Debug, Serialize)]
@@ -22,6 +21,7 @@ struct PhotoEntry {
     extension: String,
     directory: String,
     preview_path: String,
+    decision: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -33,16 +33,16 @@ struct PhotoMetadataValue {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ExportDecision {
+struct MoveDecision {
     path: String,
     decision: String,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ExportSummary {
+struct MoveSummary {
     destination_root: String,
-    exported_count: usize,
+    moved_count: usize,
     moved_photos: Vec<MovedPhoto>,
 }
 
@@ -51,15 +51,7 @@ struct ExportSummary {
 struct MovedPhoto {
     source_path: String,
     destination_path: String,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ExportProgress {
-    processed_count: usize,
-    total_count: usize,
-    current_name: String,
-    current_decision: String,
+    decision: String,
 }
 
 #[tauri::command]
@@ -70,7 +62,11 @@ fn scan_photo_directory(path: String) -> Result<Vec<PhotoEntry>, String> {
         return Err("The selected path is not a readable folder.".into());
     }
 
-    let mut photos: Vec<PhotoEntry> = WalkDir::new(&root)
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|error| format!("Could not read the selected folder: {error}"))?;
+
+    let mut photos: Vec<PhotoEntry> = WalkDir::new(&canonical_root)
         .sort_by_file_name()
         .into_iter()
         .filter_map(Result::ok)
@@ -90,9 +86,9 @@ fn scan_photo_directory(path: String) -> Result<Vec<PhotoEntry>, String> {
             let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
             let canonical = canonical_path.to_string_lossy().to_string();
 
-            let directory = path
+            let directory = canonical_path
                 .parent()
-                .unwrap_or(root.as_path())
+                .unwrap_or(canonical_root.as_path())
                 .to_string_lossy()
                 .to_string();
 
@@ -117,6 +113,7 @@ fn scan_photo_directory(path: String) -> Result<Vec<PhotoEntry>, String> {
                 extension,
                 directory,
                 preview_path,
+                decision: resolve_decision(&canonical_path, &canonical_root).to_string(),
             })
         })
         .collect();
@@ -131,108 +128,52 @@ fn scan_photo_directory(path: String) -> Result<Vec<PhotoEntry>, String> {
 }
 
 #[tauri::command]
-fn export_photos_by_decision(
-    app: AppHandle,
+fn move_photos_by_decision(
     source_root: String,
-    decisions: Vec<ExportDecision>,
-) -> Result<ExportSummary, String> {
+    decisions: Vec<MoveDecision>,
+) -> Result<MoveSummary, String> {
     if decisions.is_empty() {
-        return Err("There are no photos to organize.".into());
+        return Err("There are no photos to move.".into());
     }
 
     let canonical_source_root = PathBuf::from(&source_root)
         .canonicalize()
         .map_err(|error| format!("Could not read the source folder: {error}"))?;
     let destination_root = canonical_source_root.clone();
-
-    fs::create_dir_all(&destination_root)
-        .map_err(|error| format!("Could not prepare the rating folders: {error}"))?;
     let total_count = decisions.len();
     let mut moved_photos = Vec::with_capacity(total_count);
 
-    for (index, decision) in decisions.iter().enumerate() {
+    for decision in decisions.iter() {
         let source_path = PathBuf::from(&decision.path);
 
         if !source_path.is_file() {
-            return Err(format!(
-                "Could not organize missing file: {}",
-                source_path.display()
-            ));
+            return Err(format!("Could not move missing file: {}", source_path.display()));
         }
 
-        let decision_folder = decision_folder_name(&decision.decision)?;
-        let relative_path = normalize_relative_path(&source_path, &canonical_source_root)
-            .or_else(|| source_path.file_name().map(PathBuf::from))
-            .ok_or_else(|| {
-                format!(
-                    "Could not determine organization path for {}",
-                    source_path.display()
-                )
-            })?;
-        let target_path = destination_root.join(decision_folder).join(relative_path);
+        let target_path =
+            build_target_path(&canonical_source_root, &source_path, &decision.decision)?;
 
-        if let Some(parent) = target_path.parent() {
-            fs::create_dir_all(parent).map_err(|error| {
+        if source_path != target_path {
+            move_file(&source_path, &target_path).map_err(|error| {
                 format!(
-                    "Could not create rating folders for {}: {error}",
+                    "Could not move {} to {}: {error}",
+                    source_path.display(),
                     target_path.display()
                 )
             })?;
+            prune_empty_directories(source_path.parent(), &canonical_source_root);
         }
 
-        if source_path == target_path {
-            moved_photos.push(MovedPhoto {
-                source_path: source_path.to_string_lossy().to_string(),
-                destination_path: target_path.to_string_lossy().to_string(),
-            });
-            let current_name = source_path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or_default()
-                .to_string();
-            let _ = app.emit(
-                "export-progress",
-                ExportProgress {
-                    processed_count: index + 1,
-                    total_count,
-                    current_name,
-                    current_decision: decision.decision.clone(),
-                },
-            );
-            continue;
-        }
-
-        move_file(&source_path, &target_path).map_err(|error| {
-            format!(
-                "Could not move {} to {}: {error}",
-                source_path.display(),
-                target_path.display()
-            )
-        })?;
         moved_photos.push(MovedPhoto {
             source_path: source_path.to_string_lossy().to_string(),
             destination_path: target_path.to_string_lossy().to_string(),
+            decision: normalize_decision(&decision.decision)?.to_string(),
         });
-
-        let current_name = source_path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or_default()
-            .to_string();
-        let _ = app.emit(
-            "export-progress",
-            ExportProgress {
-                processed_count: index + 1,
-                total_count,
-                current_name,
-                current_decision: decision.decision.clone(),
-            },
-        );
     }
 
-    Ok(ExportSummary {
+    Ok(MoveSummary {
         destination_root: destination_root.to_string_lossy().to_string(),
-        exported_count: total_count,
+        moved_count: total_count,
         moved_photos,
     })
 }
@@ -257,16 +198,6 @@ fn is_supported_photo(path: &Path) -> bool {
         })
 }
 
-fn decision_folder_name(decision: &str) -> Result<&'static str, String> {
-    match decision {
-        "pick" => Ok("pick"),
-        "hold" => Ok("hold"),
-        "reject" => Ok("reject"),
-        "unrated" => Ok("unrated"),
-        other => Err(format!("Unsupported decision '{other}'.")),
-    }
-}
-
 fn normalize_relative_path(path: &Path, source_root: &Path) -> Option<PathBuf> {
     let relative_path = path.strip_prefix(source_root).ok()?;
     let mut components = relative_path.components();
@@ -286,7 +217,82 @@ fn normalize_relative_path(path: &Path, source_root: &Path) -> Option<PathBuf> {
 }
 
 fn is_decision_folder_name(value: &str) -> bool {
-    matches!(value, "pick" | "hold" | "reject" | "unrated")
+    matches!(value, "pick" | "hold" | "reject")
+}
+
+fn resolve_decision(path: &Path, source_root: &Path) -> &'static str {
+    let relative_path = match path.strip_prefix(source_root) {
+        Ok(relative_path) => relative_path,
+        Err(_) => return "unrated",
+    };
+
+    match relative_path
+        .components()
+        .next()
+        .and_then(|component| component.as_os_str().to_str())
+    {
+        Some("pick") => "pick",
+        Some("hold") => "hold",
+        Some("reject") => "reject",
+        _ => "unrated",
+    }
+}
+
+fn normalize_decision(decision: &str) -> Result<&'static str, String> {
+    match decision {
+        "pick" => Ok("pick"),
+        "hold" => Ok("hold"),
+        "reject" => Ok("reject"),
+        "unrated" => Ok("unrated"),
+        other => Err(format!("Unsupported decision '{other}'.")),
+    }
+}
+
+fn build_target_path(
+    source_root: &Path,
+    source_path: &Path,
+    decision: &str,
+) -> Result<PathBuf, String> {
+    let normalized_decision = normalize_decision(decision)?;
+    let relative_path = normalize_relative_path(source_path, source_root)
+        .or_else(|| source_path.file_name().map(PathBuf::from))
+        .ok_or_else(|| {
+            format!(
+                "Could not determine organization path for {}",
+                source_path.display()
+            )
+        })?;
+
+    let target_path = match normalized_decision {
+        "unrated" => source_root.join(relative_path),
+        folder => source_root.join(folder).join(relative_path),
+    };
+
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "Could not create rating folders for {}: {error}",
+                target_path.display()
+            )
+        })?;
+    }
+
+    Ok(target_path)
+}
+
+fn prune_empty_directories(start: Option<&Path>, stop_at: &Path) {
+    let mut current = start.map(Path::to_path_buf);
+
+    while let Some(path) = current {
+        if path == stop_at {
+            break;
+        }
+
+        match fs::remove_dir(&path) {
+            Ok(()) => current = path.parent().map(Path::to_path_buf),
+            Err(_) => break,
+        }
+    }
 }
 
 fn move_file(source: &Path, destination: &Path) -> Result<(), std::io::Error> {
@@ -574,7 +580,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             scan_photo_directory,
-            export_photos_by_decision,
+            move_photos_by_decision,
             read_photo_metadata
         ])
         .run(tauri::generate_context!())

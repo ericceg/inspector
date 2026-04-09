@@ -1,5 +1,4 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { message, open } from "@tauri-apps/plugin-dialog";
 import {
   type CSSProperties,
@@ -14,9 +13,8 @@ import { PhotoStage } from "./components/PhotoStage";
 import {
   type BackendPhoto,
   type DecisionCounts,
-  type ExportPhotoDecision,
-  type ExportProgress,
-  type ExportSummary,
+  type MovePhotoDecision,
+  type MoveSummary,
   type MovedPhoto,
   type Photo,
   type PhotoDecision,
@@ -54,7 +52,6 @@ const SPLITTER_SIZE = 12;
 
 function App() {
   const [photos, setPhotos] = useState<Photo[]>([]);
-  const [decisions, setDecisions] = useState<Record<string, PhotoDecision>>({});
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [stripFilter, setStripFilter] = useState<StripFilter>("all");
   const [showCompare, setShowCompare] = useState(false);
@@ -68,8 +65,7 @@ function App() {
   const [viewerState, setViewerState] = useState(DEFAULT_VIEWER_STATE);
   const [folderPath, setFolderPath] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
+  const [isPersistingDecision, setIsPersistingDecision] = useState(false);
   const [metadataByPhotoId, setMetadataByPhotoId] = useState<
     Record<string, PhotoMetadataValue[]>
   >({});
@@ -80,22 +76,21 @@ function App() {
     Record<string, boolean>
   >({});
   const [loadError, setLoadError] = useState("");
-  const [lastExportPath, setLastExportPath] = useState("");
   const shellRef = useRef<HTMLElement | null>(null);
   const topbarRef = useRef<HTMLElement | null>(null);
   const workspaceRef = useRef<HTMLElement | null>(null);
   const filmstripRef = useRef<HTMLDivElement | null>(null);
   const selectedFilmstripItemRef = useRef<HTMLButtonElement | null>(null);
+  const isPersistingDecisionRef = useRef(false);
   const lastLeftRailWidthRef = useRef(DEFAULT_LEFT_RAIL_WIDTH);
   const lastRightRailWidthRef = useRef(DEFAULT_RIGHT_RAIL_WIDTH);
   const lastTopbarHeightRef = useRef(DEFAULT_TOPBAR_HEIGHT);
 
-  const counts = countDecisions(photos, decisions);
+  const counts = countDecisions(photos);
   const filteredStripPhotos = photos.filter((photo) =>
-    matchesFilter(resolveDecision(decisions, photo.id), stripFilter),
+    matchesFilter(photo.decision, stripFilter),
   );
-  const navigablePhotos =
-    stripFilter === "all" ? photos : filteredStripPhotos;
+  const navigablePhotos = stripFilter === "all" ? photos : filteredStripPhotos;
   const selectedPhoto = photos[selectedIndex] ?? null;
   const selectedNavigableIndex = selectedPhoto
     ? navigablePhotos.findIndex((photo) => photo.id === selectedPhoto.id)
@@ -104,12 +99,8 @@ function App() {
     selectedNavigableIndex > 0
       ? navigablePhotos[selectedNavigableIndex - 1]
       : null;
-  const compareDecision = comparePhoto
-    ? resolveDecision(decisions, comparePhoto.id)
-    : "unrated";
-  const activeDecision = selectedPhoto
-    ? resolveDecision(decisions, selectedPhoto.id)
-    : "unrated";
+  const compareDecision = comparePhoto?.decision ?? "unrated";
+  const activeDecision = selectedPhoto?.decision ?? "unrated";
   const selectedPhotoMetadata = selectedPhoto
     ? metadataByPhotoId[selectedPhoto.id]
     : undefined;
@@ -148,11 +139,9 @@ function App() {
 
       if (!scanned.length) {
         setPhotos([]);
-        setDecisions({});
         setSelectedIndex(0);
         setFolderPath(selectedPath);
         setViewerState(DEFAULT_VIEWER_STATE);
-        setLastExportPath("");
         setLoadError("No viewable photos were found in that folder.");
         await message(
           "No supported photos or RAW files were found in the selected folder.",
@@ -164,21 +153,16 @@ function App() {
         return;
       }
 
-      const nextPhotos = scanned.map((photo) => ({
-        ...photo,
-        url: convertFileSrc(photo.previewPath),
-      }));
+      const nextPhotos = scanned.map(createPhoto);
 
       startTransition(() => {
         setPhotos(nextPhotos);
-        setDecisions({});
         setSelectedIndex(0);
         setStripFilter("all");
         setShowCompare(false);
         setShowImageValues(true);
         setViewerState(DEFAULT_VIEWER_STATE);
         setFolderPath(selectedPath);
-        setLastExportPath("");
         setMetadataByPhotoId({});
         setMetadataErrorsByPhotoId({});
         setMetadataLoadingByPhotoId({});
@@ -216,29 +200,56 @@ function App() {
     setSelectedIndex(findPhotoIndex(photos, nextPhoto.id));
   };
 
-  const applyDecision = (decision: Exclude<PhotoDecision, "unrated">) => {
-    if (!selectedPhoto) {
+  const applyDecision = async (decision: PhotoDecision) => {
+    if (!selectedPhoto || !folderPath || isPersistingDecisionRef.current) {
       return;
     }
 
-    const nextDecisions = { ...decisions, [selectedPhoto.id]: decision };
-    const nextSelectedId = findNextSelectionId({
-      photos,
-      currentFilteredPhotos: filteredStripPhotos,
-      currentSelectedId: selectedPhoto.id,
-      nextDecisions,
-      stripFilter,
-      fallbackPhotoId:
-        stripFilter === "all"
-          ? photos[clamp(selectedIndex + 1, 0, Math.max(photos.length - 1, 0))]
-              ?.id ?? selectedPhoto.id
-          : undefined,
-    });
+    const fallbackPhotoId =
+      stripFilter === "all"
+        ? photos[clamp(selectedIndex + 1, 0, Math.max(photos.length - 1, 0))]?.id ??
+          selectedPhoto.id
+        : undefined;
 
-    setDecisions(nextDecisions);
+    isPersistingDecisionRef.current = true;
+    setIsPersistingDecision(true);
 
-    if (nextSelectedId) {
-      setSelectedIndex(findPhotoIndex(photos, nextSelectedId));
+    try {
+      const summary = await invoke<MoveSummary>("move_photos_by_decision", {
+        sourceRoot: folderPath,
+        decisions: [{ path: selectedPhoto.path, decision }],
+      });
+      const nextPhotos = applyMovedPhotos(photos, summary.movedPhotos);
+      const nextSelectedId = findNextSelectionId({
+        photos: nextPhotos,
+        currentFilteredPhotos: filteredStripPhotos,
+        currentSelectedId: selectedPhoto.id,
+        stripFilter,
+        fallbackPhotoId,
+      });
+
+      setLoadError("");
+      startTransition(() => {
+        setPhotos(nextPhotos);
+        setMetadataByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
+        setMetadataErrorsByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
+        setMetadataLoadingByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
+      });
+
+      if (nextSelectedId) {
+        setSelectedIndex(findPhotoIndex(nextPhotos, nextSelectedId));
+      }
+    } catch (error) {
+      const nextError =
+        error instanceof Error ? error.message : "The photo could not be moved.";
+      setLoadError(nextError);
+      await message(nextError, {
+        title: "Move failed",
+        kind: "error",
+      });
+    } finally {
+      isPersistingDecisionRef.current = false;
+      setIsPersistingDecision(false);
     }
   };
 
@@ -247,85 +258,60 @@ function App() {
       return;
     }
 
-    const nextDecisions = { ...decisions };
-    delete nextDecisions[selectedPhoto.id];
-
-    const nextSelectedId = findNextSelectionId({
-      photos,
-      currentFilteredPhotos: filteredStripPhotos,
-      currentSelectedId: selectedPhoto.id,
-      nextDecisions,
-      stripFilter,
-    });
-
-    setDecisions(nextDecisions);
-
-    if (nextSelectedId) {
-      setSelectedIndex(findPhotoIndex(photos, nextSelectedId));
-    }
+    void applyDecision("unrated");
   };
 
-  const clearAllDecisions = () => {
-    setDecisions({});
-    setStripFilter("all");
-  };
-
-  const exportByDecision = async () => {
-    if (!photos.length || !folderPath) {
+  const clearAllDecisions = async () => {
+    if (!folderPath || isPersistingDecisionRef.current) {
       return;
     }
 
-    setIsExporting(true);
-    setExportProgress({
-      processedCount: 0,
-      totalCount: photos.length,
-      currentName: "",
-      currentDecision: "unrated",
-    });
+    const ratedPhotos = photos.filter((photo) => photo.decision !== "unrated");
+
+    if (!ratedPhotos.length) {
+      return;
+    }
+
+    isPersistingDecisionRef.current = true;
+    setIsPersistingDecision(true);
 
     try {
-      const exportPayload: ExportPhotoDecision[] = photos.map((photo) => ({
-        path: photo.path,
-        decision: resolveDecision(decisions, photo.id),
-      }));
-      const summary = await invoke<ExportSummary>("export_photos_by_decision", {
+      const summary = await invoke<MoveSummary>("move_photos_by_decision", {
         sourceRoot: folderPath,
-        decisions: exportPayload,
+        decisions: ratedPhotos.map<MovePhotoDecision>((photo) => ({
+          path: photo.path,
+          decision: "unrated",
+        })),
       });
-      const nextPhotos = buildMovedPhotos(photos, summary.movedPhotos);
+      const nextPhotos = applyMovedPhotos(photos, summary.movedPhotos);
+      const fallbackPhotoId =
+        nextPhotos[clamp(selectedIndex, 0, Math.max(nextPhotos.length - 1, 0))]?.id;
 
-      setLastExportPath(summary.destinationRoot);
+      setLoadError("");
       startTransition(() => {
         setPhotos(nextPhotos);
-        setDecisions({});
-        setSelectedIndex(0);
         setStripFilter("all");
-        setShowCompare(false);
-        setShowImageValues(true);
-        setViewerState(DEFAULT_VIEWER_STATE);
-        setFolderPath(summary.destinationRoot);
-        setLoadError("");
-        setMetadataByPhotoId({});
-        setMetadataErrorsByPhotoId({});
-        setMetadataLoadingByPhotoId({});
+        setMetadataByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
+        setMetadataErrorsByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
+        setMetadataLoadingByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
       });
-      await message(
-        `Moved ${summary.exportedCount} photos into pick, hold, reject, and unrated folders inside the loaded folder.\n\n${formatDecisionSummary(counts)}\n\nRoot:\n${summary.destinationRoot}`,
-        {
-          title: "Organization complete",
-          kind: "info",
-        },
-      );
+
+      if (fallbackPhotoId) {
+        setSelectedIndex(findPhotoIndex(nextPhotos, fallbackPhotoId));
+      } else {
+        setSelectedIndex(0);
+      }
     } catch (error) {
       const nextError =
-        error instanceof Error ? error.message : "The organization could not be completed.";
+        error instanceof Error ? error.message : "The ratings could not be cleared.";
+      setLoadError(nextError);
       await message(nextError, {
-        title: "Organization failed",
+        title: "Reset failed",
         kind: "error",
       });
     } finally {
-      setIsExporting(false);
-      setExportProgress(null);
+      isPersistingDecisionRef.current = false;
+      setIsPersistingDecision(false);
     }
   };
 
@@ -446,13 +432,13 @@ function App() {
       return;
     }
 
-    if ((event.key === "o" || event.key === "O") && !isLoading) {
+    if ((event.key === "o" || event.key === "O") && !isLoading && !isPersistingDecision) {
       event.preventDefault();
       void loadFolder();
       return;
     }
 
-    if (!photos.length) {
+    if (!photos.length || isPersistingDecisionRef.current) {
       return;
     }
 
@@ -475,16 +461,16 @@ function App() {
         break;
       case "1":
         event.preventDefault();
-        applyDecision("pick");
+        void applyDecision("pick");
         break;
       case "2":
         event.preventDefault();
-        applyDecision("hold");
+        void applyDecision("hold");
         break;
       case "3":
       case "Backspace":
         event.preventDefault();
-        applyDecision("reject");
+        void applyDecision("reject");
         break;
       case "0":
         event.preventDefault();
@@ -517,29 +503,6 @@ function App() {
   }, [handleGlobalKeyDown]);
 
   useEffect(() => {
-    let isMounted = true;
-    let dispose: (() => void) | undefined;
-
-    void listen<ExportProgress>("export-progress", (event) => {
-      if (isMounted) {
-        setExportProgress(event.payload);
-      }
-    }).then((unlisten) => {
-      if (isMounted) {
-        dispose = unlisten;
-        return;
-      }
-
-      unlisten();
-    });
-
-    return () => {
-      isMounted = false;
-      dispose?.();
-    };
-  }, []);
-
-  useEffect(() => {
     if (!topbarRef.current || topbarHeight !== null) {
       return;
     }
@@ -567,13 +530,10 @@ function App() {
       return;
     }
 
-    if (
-      !matchesFilter(resolveDecision(decisions, selectedPhoto.id), stripFilter) &&
-      filteredStripPhotos.length
-    ) {
+    if (!matchesFilter(selectedPhoto.decision, stripFilter) && filteredStripPhotos.length) {
       setSelectedIndex(findPhotoIndex(photos, filteredStripPhotos[0].id));
     }
-  }, [decisions, filteredStripPhotos, photos, selectedPhoto, stripFilter]);
+  }, [filteredStripPhotos, photos, selectedPhoto, stripFilter]);
 
   useEffect(() => {
     if (selectedPhoto) {
@@ -746,9 +706,6 @@ function App() {
   const shellStyle = {
     "--topbar-height": `${isTopbarCollapsed ? 0 : topbarHeight ?? DEFAULT_TOPBAR_HEIGHT}px`,
   } as CSSProperties;
-  const exportProgressValue = exportProgress
-    ? Math.round((exportProgress.processedCount / Math.max(exportProgress.totalCount, 1)) * 100)
-    : 0;
 
   return (
     <main
@@ -776,7 +733,7 @@ function App() {
           <button
             className="button button--primary"
             onClick={() => void loadFolder()}
-            disabled={isLoading}
+            disabled={isLoading || isPersistingDecision}
             type="button"
           >
             {isLoading ? "Scanning…" : "Open Folder"}
@@ -791,19 +748,11 @@ function App() {
           </button>
           <button
             className="button"
-            onClick={clearAllDecisions}
-            disabled={!Object.keys(decisions).length}
+            onClick={() => void clearAllDecisions()}
+            disabled={!photos.some((photo) => photo.decision !== "unrated") || isPersistingDecision}
             type="button"
           >
-            Reset Ratings
-          </button>
-          <button
-            className="button"
-            onClick={() => void exportByDecision()}
-            disabled={!photos.length || isExporting}
-            type="button"
-          >
-            {isExporting ? "Organizing…" : "Organize By Rating"}
+            {isPersistingDecision ? "Updating…" : "Reset Ratings"}
           </button>
         </div>
       </header>
@@ -849,39 +798,11 @@ function App() {
                 {folderPath}
               </p>
             ) : null}
-            {lastExportPath ? (
-              <p className="session-note" title={lastExportPath}>
-                Organized in: {lastExportPath}
-              </p>
-            ) : null}
-            {isExporting && exportProgress ? (
-              <div className="export-progress" aria-live="polite">
-                <div className="export-progress__meta">
-                  <span>Organizing photos</span>
-                  <strong>
-                    {exportProgress.processedCount} / {exportProgress.totalCount}
-                  </strong>
-                </div>
-                <div
-                  aria-label={`Move progress ${exportProgressValue}%`}
-                  aria-valuemax={100}
-                  aria-valuemin={0}
-                  aria-valuenow={exportProgressValue}
-                  className="export-progress__track"
-                  role="progressbar"
-                >
-                  <span
-                    className="export-progress__fill"
-                    style={{ width: `${exportProgressValue}%` }}
-                  />
-                </div>
-                <p className="export-progress__label">
-                  {exportProgress.currentName
-                    ? `${exportProgress.currentDecision} · ${exportProgress.currentName}`
-                    : "Preparing move…"}
-                </p>
-              </div>
-            ) : null}
+            <p className="session-note">
+              {isPersistingDecision
+                ? "Updating folders on disk…"
+                : "Ratings sort into pick, hold, and reject folders as you go."}
+            </p>
             {loadError ? <p className="session-error">{loadError}</p> : null}
           </div>
 
@@ -915,7 +836,7 @@ function App() {
             {filteredStripPhotos.length ? (
               <div ref={filmstripRef} className="filmstrip">
                 {filteredStripPhotos.map((photo) => {
-                  const decision = resolveDecision(decisions, photo.id);
+                  const decision = photo.decision;
                   const isSelected = photo.id === selectedPhoto?.id;
 
                   return (
@@ -1076,7 +997,7 @@ function App() {
               <button
                 className="button button--primary"
                 onClick={() => void loadFolder()}
-                disabled={isLoading}
+                disabled={isLoading || isPersistingDecision}
                 type="button"
               >
                 {isLoading ? "Scanning…" : "Choose Folder"}
@@ -1109,8 +1030,8 @@ function App() {
             <div className="decision-grid">
               <button
                 className="decision-button decision-button--pick"
-                disabled={!selectedPhoto}
-                onClick={() => applyDecision("pick")}
+                disabled={!selectedPhoto || isPersistingDecision}
+                onClick={() => void applyDecision("pick")}
                 type="button"
               >
                 <strong>1</strong>
@@ -1118,8 +1039,8 @@ function App() {
               </button>
               <button
                 className="decision-button decision-button--hold"
-                disabled={!selectedPhoto}
-                onClick={() => applyDecision("hold")}
+                disabled={!selectedPhoto || isPersistingDecision}
+                onClick={() => void applyDecision("hold")}
                 type="button"
               >
                 <strong>2</strong>
@@ -1127,8 +1048,8 @@ function App() {
               </button>
               <button
                 className="decision-button decision-button--reject"
-                disabled={!selectedPhoto}
-                onClick={() => applyDecision("reject")}
+                disabled={!selectedPhoto || isPersistingDecision}
+                onClick={() => void applyDecision("reject")}
                 type="button"
               >
                 <strong>3</strong>
@@ -1240,21 +1161,17 @@ function findPhotoIndex(photos: Photo[], photoId: string) {
   return index === -1 ? 0 : index;
 }
 
-function resolveDecision(
-  decisions: Record<string, PhotoDecision>,
-  photoId: string,
-): PhotoDecision {
-  return decisions[photoId] ?? "unrated";
+function createPhoto(photo: BackendPhoto): Photo {
+  return {
+    ...photo,
+    url: convertFileSrc(photo.previewPath),
+  };
 }
 
-function countDecisions(
-  photos: Photo[],
-  decisions: Record<string, PhotoDecision>,
-): DecisionCounts {
+function countDecisions(photos: Photo[]): DecisionCounts {
   return photos.reduce<DecisionCounts>(
     (counts, photo) => {
-      const decision = resolveDecision(decisions, photo.id);
-      counts[decision] += 1;
+      counts[photo.decision] += 1;
       return counts;
     },
     { pick: 0, hold: 0, reject: 0, unrated: 0 },
@@ -1288,14 +1205,12 @@ function findNextSelectionId({
   photos,
   currentFilteredPhotos,
   currentSelectedId,
-  nextDecisions,
   stripFilter,
   fallbackPhotoId,
 }: {
   photos: Photo[];
   currentFilteredPhotos: Photo[];
   currentSelectedId: string;
-  nextDecisions: Record<string, PhotoDecision>;
   stripFilter: StripFilter;
   fallbackPhotoId?: string;
 }) {
@@ -1303,9 +1218,7 @@ function findNextSelectionId({
     return fallbackPhotoId ?? currentSelectedId;
   }
 
-  const nextFilteredPhotos = photos.filter((photo) =>
-    matchesFilter(resolveDecision(nextDecisions, photo.id), stripFilter),
-  );
+  const nextFilteredPhotos = photos.filter((photo) => matchesFilter(photo.decision, stripFilter));
 
   if (!nextFilteredPhotos.length) {
     return currentSelectedId;
@@ -1332,31 +1245,19 @@ function summarizePath(path: string) {
   return parts.slice(-2).join(" / ") || path;
 }
 
-function formatDecisionSummary(counts: DecisionCounts) {
-  const labels: Array<[PhotoDecision, string]> = [
-    ["pick", "pick"],
-    ["hold", "hold"],
-    ["reject", "reject"],
-    ["unrated", "unrated"],
-  ];
-
-  return labels
-    .map(([decision, label]) => `${counts[decision]} ${label}`)
-    .join(" • ");
-}
-
-function buildMovedPhotos(photos: Photo[], movedPhotos: MovedPhoto[]) {
+function applyMovedPhotos(photos: Photo[], movedPhotos: MovedPhoto[]) {
   const movedPhotoMap = new Map(
-    movedPhotos.map((entry) => [entry.sourcePath, entry.destinationPath]),
+    movedPhotos.map((entry) => [entry.sourcePath, entry]),
   );
 
   return photos.map((photo) => {
-    const destinationPath = movedPhotoMap.get(photo.path);
+    const movedPhoto = movedPhotoMap.get(photo.path);
 
-    if (!destinationPath) {
+    if (!movedPhoto) {
       return photo;
     }
 
+    const destinationPath = movedPhoto.destinationPath;
     const nextPreviewPath = isBrowserViewableExtension(photo.extension)
       ? destinationPath
       : photo.previewPath;
@@ -1368,8 +1269,31 @@ function buildMovedPhotos(photos: Photo[], movedPhotos: MovedPhoto[]) {
       directory: parentPath(destinationPath),
       previewPath: nextPreviewPath,
       url: convertFileSrc(nextPreviewPath),
+      decision: movedPhoto.decision,
     };
   });
+}
+
+function remapPhotoState<T>(current: Record<string, T>, movedPhotos: MovedPhoto[]) {
+  let nextState = current;
+
+  for (const movedPhoto of movedPhotos) {
+    if (
+      movedPhoto.sourcePath === movedPhoto.destinationPath ||
+      !Object.prototype.hasOwnProperty.call(nextState, movedPhoto.sourcePath)
+    ) {
+      continue;
+    }
+
+    if (nextState === current) {
+      nextState = { ...current };
+    }
+
+    nextState[movedPhoto.destinationPath] = nextState[movedPhoto.sourcePath];
+    delete nextState[movedPhoto.sourcePath];
+  }
+
+  return nextState;
 }
 
 function isBrowserViewableExtension(extension: string) {
