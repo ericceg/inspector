@@ -113,6 +113,9 @@ function App() {
   const isSelectedPhotoMetadataLoading = selectedPhoto
     ? metadataLoadingByPhotoId[selectedPhoto.id] === true
     : false;
+  const isComparePhotoMetadataLoading = comparePhoto
+    ? metadataLoadingByPhotoId[comparePhoto.id] === true
+    : false;
   const isFocusView =
     isTopbarCollapsed && isLeftRailCollapsed && isRightRailCollapsed;
 
@@ -752,7 +755,7 @@ function App() {
             disabled={!photos.some((photo) => photo.decision !== "unrated") || isPersistingDecision}
             type="button"
           >
-            {isPersistingDecision ? "Updating…" : "Reset Ratings"}
+            Reset Ratings
           </button>
         </div>
       </header>
@@ -799,9 +802,7 @@ function App() {
               </p>
             ) : null}
             <p className="session-note">
-              {isPersistingDecision
-                ? "Updating folders on disk…"
-                : "Ratings sort into pick, hold, and reject folders as you go."}
+              Ratings sort into pick, hold, and reject folders as you go.
             </p>
             {loadError ? <p className="session-error">{loadError}</p> : null}
           </div>
@@ -870,12 +871,6 @@ function App() {
                         <strong>{photo.name}</strong>
                         <span title={photo.directory}>{summarizePath(photo.directory)}</span>
                       </div>
-
-                      <span
-                        className={`decision-swatch decision-swatch--${decision}`}
-                        aria-label={`Status: ${DECISION_LABELS[decision]}`}
-                        title={DECISION_LABELS[decision]}
-                      />
                     </button>
                   );
                 })}
@@ -960,6 +955,7 @@ function App() {
                 <PhotoStage
                   detail="Reference"
                   decision={compareDecision}
+                  isMetadataLoading={isComparePhotoMetadataLoading}
                   label="Previous frame"
                   overlayMetadata={
                     showImageValues
@@ -967,6 +963,7 @@ function App() {
                       : undefined
                   }
                   photo={comparePhoto}
+                  showMetadataOverlay={showImageValues}
                   viewerState={viewerState}
                   onViewerChange={setViewerState}
                 />
@@ -975,6 +972,7 @@ function App() {
                 detail={showCompare && comparePhoto ? "Active" : "Selected"}
                 decision={activeDecision}
                 emphasis="primary"
+                isMetadataLoading={isSelectedPhotoMetadataLoading}
                 label="Current frame"
                 overlayMetadata={
                   showImageValues
@@ -982,6 +980,7 @@ function App() {
                     : undefined
                 }
                 photo={selectedPhoto}
+                showMetadataOverlay={showImageValues}
                 viewerState={viewerState}
                 onViewerChange={setViewerState}
               />

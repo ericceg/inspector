@@ -21,11 +21,17 @@
   --text-muted: #6b7280;
   --accent: #2563eb;
   --accent-soft: rgba(37, 99, 235, 0.08);
-  --pick: #15803d;
-  --hold: #a16207;
-  --reject: #dc2626;
-  --unrated: #64748b;
+  --pick-rgb: 21 128 61;
+  --hold-rgb: 255 238 0;
+  --reject-rgb: 220 38 38;
+  --unrated-rgb: 100 116 139;
+  --pick: rgb(var(--pick-rgb));
+  --hold: rgb(var(--hold-rgb));
+  --reject: rgb(var(--reject-rgb));
+  --unrated: rgb(var(--unrated-rgb));
 }
+
+
 
 html,
 body,
@@ -378,14 +384,15 @@ button {
 
 .filmstrip__item {
   --decision-color: var(--unrated);
+  --decision-background: rgb(var(--unrated-rgb) / 0.08);
   display: grid;
-  grid-template-columns: 5.4rem minmax(0, 1fr) auto;
+  grid-template-columns: 5.4rem minmax(0, 1fr);
   gap: 0.7rem;
   align-items: center;
   padding: 0.45rem;
   border-radius: 2px;
   border: 1px solid var(--border);
-  background: transparent;
+  background: var(--decision-background);
   cursor: pointer;
   color: inherit;
   text-align: left;
@@ -398,26 +405,32 @@ button {
 
 .filmstrip__item--pick {
   --decision-color: var(--pick);
-  border-color: rgba(21, 128, 61, 0.2);
+  --decision-background: rgb(var(--pick-rgb) / 0.2);
+  border-color: rgb(var(--pick-rgb) / 0.2);
 }
 
 .filmstrip__item--hold {
   --decision-color: var(--hold);
-  border-color: rgba(161, 98, 7, 0.2);
+  --decision-background: rgb(var(--hold-rgb) / 0.2);
+  border-color: rgb(var(--hold-rgb) / 0.2);
 }
 
 .filmstrip__item--reject {
   --decision-color: var(--reject);
-  border-color: rgba(220, 38, 38, 0.2);
+  --decision-background: rgb(var(--reject-rgb) / 0.2);
+  border-color: rgb(var(--reject-rgb) / 0.2);
 }
 
 .filmstrip__item--unrated {
   --decision-color: var(--unrated);
+  --decision-background: rgb(var(--unrated-rgb) / 0.08);
 }
 
 .filmstrip__item.is-selected {
   border-color: rgba(37, 99, 235, 0.35);
-  background: var(--accent-soft);
+  background:
+    linear-gradient(0deg, rgba(37, 99, 235, 0.08), rgba(37, 99, 235, 0.08)),
+    var(--decision-background);
 }
 
 .filmstrip__thumb {
@@ -430,19 +443,19 @@ button {
 }
 
 .filmstrip__item--pick .filmstrip__thumb {
-  border-color: rgba(21, 128, 61, 0.34);
+  border-color: rgb(var(--pick-rgb) / 0.34);
 }
 
 .filmstrip__item--hold .filmstrip__thumb {
-  border-color: rgba(161, 98, 7, 0.34);
+  border-color: rgb(var(--hold-rgb) / 0.34);
 }
 
 .filmstrip__item--reject .filmstrip__thumb {
-  border-color: rgba(220, 38, 38, 0.34);
+  border-color: rgb(var(--reject-rgb) / 0.34);
 }
 
 .filmstrip__item--unrated .filmstrip__thumb {
-  border-color: rgba(100, 116, 139, 0.32);
+  border-color: rgb(var(--unrated-rgb) / 0.32);
 }
 
 .filmstrip__thumb img {
@@ -554,6 +567,31 @@ button {
   -webkit-user-select: none;
 }
 
+.photo-stage__viewport--status::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: var(--status-overlay, transparent);
+}
+
+.photo-stage__viewport--pick {
+  --status-overlay: rgb(var(--pick-rgb) / 0.14);
+}
+
+.photo-stage__viewport--hold {
+  --status-overlay: rgb(var(--hold-rgb) / 0.14);
+}
+
+.photo-stage__viewport--reject {
+  --status-overlay: rgb(var(--reject-rgb) / 0.14);
+}
+
+.photo-stage__viewport--unrated {
+  --status-overlay: rgb(var(--unrated-rgb) / 0.12);
+}
+
 .photo-stage__viewport.is-draggable {
   cursor: grab;
 }
@@ -565,6 +603,7 @@ button {
 .photo-stage__image {
   position: absolute;
   inset: 0 auto auto 0;
+  z-index: 0;
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
@@ -582,7 +621,7 @@ body.is-dragging-photo-stage {
   position: absolute;
   top: 1rem;
   left: 1rem;
-  z-index: 1;
+  z-index: 2;
   pointer-events: none;
 }
 
@@ -629,6 +668,7 @@ body.is-dragging-photo-stage {
   position: absolute;
   right: 1rem;
   bottom: 1rem;
+  z-index: 2;
   display: inline-flex;
   gap: 0.55rem;
   padding: 0.45rem 0.7rem;
@@ -649,6 +689,8 @@ body.is-dragging-photo-stage {
 }
 
 .photo-stage__placeholder {
+  position: relative;
+  z-index: 2;
   min-height: 100%;
   padding: 1.4rem;
 }
@@ -709,15 +751,15 @@ body.is-dragging-photo-stage {
 }
 
 .decision-button--pick {
-  border-color: rgba(21, 128, 61, 0.22);
+  border-color: rgb(var(--pick-rgb) / 0.22);
 }
 
 .decision-button--hold {
-  border-color: rgba(161, 98, 7, 0.22);
+  border-color: rgb(var(--hold-rgb) / 0.22);
 }
 
 .decision-button--reject {
-  border-color: rgba(220, 38, 38, 0.22);
+  border-color: rgb(var(--reject-rgb) / 0.22);
 }
 
 .decision-chip,
@@ -728,7 +770,7 @@ body.is-dragging-photo-stage {
   padding: 0.35rem 0.65rem;
   border-radius: 2px;
   border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(100, 116, 139, 0.12);
+  background: rgb(var(--unrated-rgb) / 0.12);
   color: var(--unrated);
   font-size: 0.76rem;
   font-weight: 700;
@@ -747,7 +789,7 @@ body.is-dragging-photo-stage {
   justify-self: end;
   border-radius: 2px;
   border: 1px solid rgba(148, 163, 184, 0.32);
-  background: rgba(100, 116, 139, 0.2);
+  background: rgb(var(--unrated-rgb) / 0.2);
   box-sizing: border-box;
 }
 
@@ -760,32 +802,32 @@ body.is-dragging-photo-stage {
 .decision-chip--pick,
 .decision-tag--pick,
 .decision-swatch--pick {
-  background: rgba(21, 128, 61, 0.1);
-  border-color: rgba(21, 128, 61, 0.24);
+  background: rgb(var(--pick-rgb) / 0.1);
+  border-color: rgb(var(--pick-rgb) / 0.24);
   color: var(--pick);
 }
 
 .decision-chip--hold,
 .decision-tag--hold,
 .decision-swatch--hold {
-  background: rgba(161, 98, 7, 0.12);
-  border-color: rgba(161, 98, 7, 0.24);
+  background: rgb(var(--hold-rgb) / 0.12);
+  border-color: rgb(var(--hold-rgb) / 0.24);
   color: var(--hold);
 }
 
 .decision-chip--reject,
 .decision-tag--reject,
 .decision-swatch--reject {
-  background: rgba(220, 38, 38, 0.1);
-  border-color: rgba(220, 38, 38, 0.24);
+  background: rgb(var(--reject-rgb) / 0.1);
+  border-color: rgb(var(--reject-rgb) / 0.24);
   color: var(--reject);
 }
 
 .decision-chip--unrated,
 .decision-tag--unrated,
 .decision-swatch--unrated {
-  background: rgba(100, 116, 139, 0.12);
-  border-color: rgba(100, 116, 139, 0.24);
+  background: rgb(var(--unrated-rgb) / 0.12);
+  border-color: rgb(var(--unrated-rgb) / 0.24);
   color: var(--unrated);
 }
 

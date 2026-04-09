@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type SyntheticEvent,
@@ -29,20 +30,26 @@ type PhotoStageProps = {
   detail: string;
   decision: PhotoDecision;
   emphasis?: "primary" | "secondary";
+  isMetadataLoading?: boolean;
   label: string;
   overlayMetadata?: PhotoMetadataValue[];
   photo: Photo | null;
+  showMetadataOverlay?: boolean;
   viewerState: ViewerState;
   onViewerChange: (next: ViewerState) => void;
 };
+
+const OVERLAY_METADATA_LABELS = ["ISO", "Aperture", "Shutter"] as const;
 
 export function PhotoStage({
   detail,
   decision,
   emphasis = "secondary",
+  isMetadataLoading = false,
   label,
   overlayMetadata,
   photo,
+  showMetadataOverlay = false,
   viewerState,
   onViewerChange,
 }: PhotoStageProps) {
@@ -84,14 +91,15 @@ export function PhotoStage({
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    setNaturalSize(null);
-  }, [photo]);
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     const image = imageRef.current;
 
-    if (!photo || !image || !image.complete || !image.naturalWidth || !image.naturalHeight) {
+    if (!photo) {
+      setNaturalSize(null);
+      return;
+    }
+
+    if (!image || !image.complete || !image.naturalWidth || !image.naturalHeight) {
       return;
     }
 
@@ -99,12 +107,18 @@ export function PhotoStage({
       width: image.naturalWidth,
       height: image.naturalHeight,
     });
-  }, [photo, photo?.url]);
+  }, [photo?.url, photo]);
 
   const frame =
     naturalSize && viewportSize.width && viewportSize.height
       ? buildFrameMetrics(viewerState, viewportSize, naturalSize)
       : null;
+  const overlayRows = OVERLAY_METADATA_LABELS.map((label) => ({
+    label,
+    value:
+      overlayMetadata?.find((item) => item.label === label)?.value ??
+      (isMetadataLoading ? "…" : "—"),
+  }));
 
   const handleImageLoad = (event: SyntheticEvent<HTMLImageElement>) => {
     const image = event.currentTarget;
@@ -246,11 +260,14 @@ export function PhotoStage({
 
       <div
         ref={viewportRef}
-        className={
-          frame && frame.normalized.zoom > 1.001
-            ? "photo-stage__viewport is-draggable"
-            : "photo-stage__viewport"
-        }
+        className={[
+          "photo-stage__viewport",
+          emphasis === "secondary" ? "photo-stage__viewport--status" : "",
+          emphasis === "secondary" ? `photo-stage__viewport--${decision}` : "",
+          frame && frame.normalized.zoom > 1.001 ? "is-draggable" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
         onDoubleClick={handleDoubleClick}
         onPointerCancel={clearDrag}
         onPointerDown={handlePointerDown}
@@ -265,10 +282,10 @@ export function PhotoStage({
                 <span className={`decision-chip decision-chip--${decision} decision-chip--overlay`}>
                   {decision}
                 </span>
-                {overlayMetadata?.length ? (
+                {showMetadataOverlay ? (
                   <div className="photo-stage__meta">
-                    {overlayMetadata.map((item) => (
-                      <div className="photo-stage__meta-row" key={`${item.label}:${item.value}`}>
+                    {overlayRows.map((item) => (
+                      <div className="photo-stage__meta-row" key={item.label}>
                         <span>{item.label}</span>
                         <strong>{item.value}</strong>
                       </div>
