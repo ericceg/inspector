@@ -1,6 +1,8 @@
 export type PhotoDecision = "pick" | "hold" | "reject" | "unrated";
 
-export type StripFilter = "all" | PhotoDecision;
+export type FilterPillValue = "all" | PhotoDecision;
+
+export type StripFilter = PhotoDecision[];
 
 export type ViewerState = {
   zoom: number;

@@ -13,6 +13,7 @@ import { PhotoStage } from "./components/PhotoStage";
 import {
   type BackendPhoto,
   type DecisionCounts,
+  type FilterPillValue,
   type MovePhotoDecision,
   type MoveSummary,
   type MovedPhoto,
@@ -24,7 +25,9 @@ import {
 } from "./types";
 import "./App.css";
 
-const FILTERS: Array<{ value: StripFilter; label: string }> = [
+const FILTERABLE_DECISIONS: PhotoDecision[] = ["pick", "hold", "reject", "unrated"];
+
+const FILTERS: Array<{ value: FilterPillValue; label: string }> = [
   { value: "all", label: "All" },
   { value: "pick", label: "Picks" },
   { value: "hold", label: "Hold" },
@@ -50,10 +53,14 @@ const MIN_VIEWER_HEIGHT = 300;
 const PANEL_COLLAPSE_THRESHOLD = 84;
 const SPLITTER_SIZE = 12;
 
+function createAllStripFilter(): StripFilter {
+  return [...FILTERABLE_DECISIONS];
+}
+
 function App() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [stripFilter, setStripFilter] = useState<StripFilter>("all");
+  const [stripFilter, setStripFilter] = useState<StripFilter>(createAllStripFilter);
   const [showCompare, setShowCompare] = useState(false);
   const [showImageValues, setShowImageValues] = useState(true);
   const [isTopbarCollapsed, setIsTopbarCollapsed] = useState(false);
@@ -90,7 +97,8 @@ function App() {
   const filteredStripPhotos = photos.filter((photo) =>
     matchesFilter(photo.decision, stripFilter),
   );
-  const navigablePhotos = stripFilter === "all" ? photos : filteredStripPhotos;
+  const isAllFilterSelected = isAllStripFilter(stripFilter);
+  const navigablePhotos = filteredStripPhotos;
   const selectedPhoto = photos[selectedIndex] ?? null;
   const selectedNavigableIndex = selectedPhoto
     ? navigablePhotos.findIndex((photo) => photo.id === selectedPhoto.id)
@@ -118,6 +126,27 @@ function App() {
     : false;
   const isFocusView =
     isTopbarCollapsed && isLeftRailCollapsed && isRightRailCollapsed;
+
+  const toggleStripFilter = (value: FilterPillValue) => {
+    setStripFilter((current) => {
+      if (value === "all") {
+        return createAllStripFilter();
+      }
+
+      if (current.includes(value)) {
+        const next = current.filter((entry) => entry !== value);
+        return next.length ? next : createAllStripFilter();
+      }
+
+      const next = FILTERABLE_DECISIONS.filter(
+        (decision) => current.includes(decision) || decision === value,
+      );
+
+      return next.length === FILTERABLE_DECISIONS.length
+        ? createAllStripFilter()
+        : next;
+    });
+  };
 
   const loadFolder = async () => {
     const selectedPath = await open({
@@ -161,7 +190,7 @@ function App() {
       startTransition(() => {
         setPhotos(nextPhotos);
         setSelectedIndex(0);
-        setStripFilter("all");
+        setStripFilter(createAllStripFilter());
         setShowCompare(false);
         setShowImageValues(true);
         setViewerState(DEFAULT_VIEWER_STATE);
@@ -209,7 +238,7 @@ function App() {
     }
 
     const fallbackPhotoId =
-      stripFilter === "all"
+      isAllFilterSelected
         ? photos[clamp(selectedIndex + 1, 0, Math.max(photos.length - 1, 0))]?.id ??
           selectedPhoto.id
         : undefined;
@@ -228,6 +257,7 @@ function App() {
         currentFilteredPhotos: filteredStripPhotos,
         currentSelectedId: selectedPhoto.id,
         stripFilter,
+        isAllFilterSelected,
         fallbackPhotoId,
       });
 
@@ -293,7 +323,7 @@ function App() {
       setLoadError("");
       startTransition(() => {
         setPhotos(nextPhotos);
-        setStripFilter("all");
+        setStripFilter(createAllStripFilter());
         setMetadataByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
         setMetadataErrorsByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
         setMetadataLoadingByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
@@ -526,10 +556,6 @@ function App() {
 
   useEffect(() => {
     if (!selectedPhoto) {
-      return;
-    }
-
-    if (stripFilter === "all") {
       return;
     }
 
@@ -810,21 +836,22 @@ function App() {
           <div className="rail__section">
             <p className="section-label">Filters</p>
             <div className="filter-row">
-              {FILTERS.map((filter) => (
-                <button
-                  key={filter.value}
-                  className={
-                    filter.value === stripFilter
-                      ? "filter-pill is-active"
-                      : "filter-pill"
-                  }
-                  onClick={() => setStripFilter(filter.value)}
-                  type="button"
-                >
-                  <span>{filter.label}</span>
-                  <span>{countForFilter(counts, filter.value)}</span>
-                </button>
-              ))}
+              {FILTERS.map((filter) => {
+                const isActive = isFilterActive(stripFilter, filter.value);
+
+                return (
+                  <button
+                    key={filter.value}
+                    aria-pressed={isActive}
+                    className={isActive ? "filter-pill is-active" : "filter-pill"}
+                    onClick={() => toggleStripFilter(filter.value)}
+                    type="button"
+                  >
+                    <span>{filter.label}</span>
+                    <span>{countForFilter(counts, filter.value)}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -1189,10 +1216,18 @@ function pickStageOverlayMetadata(metadata: PhotoMetadataValue[] | undefined) {
 }
 
 function matchesFilter(decision: PhotoDecision, filter: StripFilter) {
-  return filter === "all" || decision === filter;
+  return filter.includes(decision);
 }
 
-function countForFilter(counts: DecisionCounts, filter: StripFilter) {
+function isAllStripFilter(filter: StripFilter) {
+  return FILTERABLE_DECISIONS.every((decision) => filter.includes(decision));
+}
+
+function isFilterActive(filter: StripFilter, value: FilterPillValue) {
+  return value === "all" ? isAllStripFilter(filter) : filter.includes(value);
+}
+
+function countForFilter(counts: DecisionCounts, filter: FilterPillValue) {
   if (filter === "all") {
     return counts.pick + counts.hold + counts.reject + counts.unrated;
   }
@@ -1205,15 +1240,17 @@ function findNextSelectionId({
   currentFilteredPhotos,
   currentSelectedId,
   stripFilter,
+  isAllFilterSelected,
   fallbackPhotoId,
 }: {
   photos: Photo[];
   currentFilteredPhotos: Photo[];
   currentSelectedId: string;
   stripFilter: StripFilter;
+  isAllFilterSelected: boolean;
   fallbackPhotoId?: string;
 }) {
-  if (stripFilter === "all") {
+  if (isAllFilterSelected) {
     return fallbackPhotoId ?? currentSelectedId;
   }
 
