@@ -153,7 +153,7 @@ function App() {
         return;
       }
 
-      const nextPhotos = scanned.map(createPhoto);
+      const nextPhotos = sortPhotosByName(scanned.map(createPhoto));
 
       startTransition(() => {
         setPhotos(nextPhotos);
@@ -1250,27 +1250,47 @@ function applyMovedPhotos(photos: Photo[], movedPhotos: MovedPhoto[]) {
     movedPhotos.map((entry) => [entry.sourcePath, entry]),
   );
 
-  return photos.map((photo) => {
-    const movedPhoto = movedPhotoMap.get(photo.path);
+  return sortPhotosByName(
+    photos.map((photo) => {
+      const movedPhoto = movedPhotoMap.get(photo.path);
 
-    if (!movedPhoto) {
-      return photo;
+      if (!movedPhoto) {
+        return photo;
+      }
+
+      const destinationPath = movedPhoto.destinationPath;
+      const nextPreviewPath = isBrowserViewableExtension(photo.extension)
+        ? destinationPath
+        : photo.previewPath;
+
+      return {
+        ...photo,
+        id: destinationPath,
+        path: destinationPath,
+        directory: parentPath(destinationPath),
+        previewPath: nextPreviewPath,
+        url: convertFileSrc(nextPreviewPath),
+        decision: movedPhoto.decision,
+      };
+    }),
+  );
+}
+
+function sortPhotosByName(photos: Photo[]) {
+  return [...photos].sort((left, right) => {
+    const nameComparison = left.name.localeCompare(right.name, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+
+    if (nameComparison !== 0) {
+      return nameComparison;
     }
 
-    const destinationPath = movedPhoto.destinationPath;
-    const nextPreviewPath = isBrowserViewableExtension(photo.extension)
-      ? destinationPath
-      : photo.previewPath;
-
-    return {
-      ...photo,
-      id: destinationPath,
-      path: destinationPath,
-      directory: parentPath(destinationPath),
-      previewPath: nextPreviewPath,
-      url: convertFileSrc(nextPreviewPath),
-      decision: movedPhoto.decision,
-    };
+    return left.path.localeCompare(right.path, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
   });
 }
 
