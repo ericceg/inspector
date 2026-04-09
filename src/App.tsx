@@ -58,7 +58,7 @@ function App() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [stripFilter, setStripFilter] = useState<StripFilter>("all");
   const [showCompare, setShowCompare] = useState(false);
-  const [showImageValues, setShowImageValues] = useState(false);
+  const [showImageValues, setShowImageValues] = useState(true);
   const [isTopbarCollapsed, setIsTopbarCollapsed] = useState(false);
   const [isLeftRailCollapsed, setIsLeftRailCollapsed] = useState(false);
   const [isRightRailCollapsed, setIsRightRailCollapsed] = useState(false);
@@ -175,7 +175,7 @@ function App() {
         setSelectedIndex(0);
         setStripFilter("all");
         setShowCompare(false);
-        setShowImageValues(false);
+        setShowImageValues(true);
         setViewerState(DEFAULT_VIEWER_STATE);
         setFolderPath(selectedPath);
         setLastExportPath("");
@@ -301,7 +301,7 @@ function App() {
         setSelectedIndex(0);
         setStripFilter("all");
         setShowCompare(false);
-        setShowImageValues(false);
+        setShowImageValues(true);
         setViewerState(DEFAULT_VIEWER_STATE);
         setFolderPath(summary.destinationRoot);
         setLoadError("");
@@ -576,15 +576,11 @@ function App() {
   }, [decisions, filteredStripPhotos, photos, selectedPhoto, stripFilter]);
 
   useEffect(() => {
-    if (!showImageValues) {
-      return;
-    }
-
     if (selectedPhoto) {
       void loadPhotoMetadata(selectedPhoto);
     }
 
-    if (comparePhoto) {
+    if (showImageValues && comparePhoto) {
       void loadPhotoMetadata(comparePhoto);
     }
   }, [comparePhoto, loadPhotoMetadata, selectedPhoto, showImageValues]);
@@ -1044,7 +1040,11 @@ function App() {
                   detail="Reference"
                   decision={compareDecision}
                   label="Previous frame"
-                  overlayMetadata={showImageValues ? pickStageOverlayMetadata(comparePhotoMetadata) : undefined}
+                  overlayMetadata={
+                    showImageValues
+                      ? pickStageOverlayMetadata(comparePhotoMetadata)
+                      : undefined
+                  }
                   photo={comparePhoto}
                   viewerState={viewerState}
                   onViewerChange={setViewerState}
@@ -1055,7 +1055,11 @@ function App() {
                 decision={activeDecision}
                 emphasis="primary"
                 label="Current frame"
-                overlayMetadata={showImageValues ? pickStageOverlayMetadata(selectedPhotoMetadata) : undefined}
+                overlayMetadata={
+                  showImageValues
+                    ? pickStageOverlayMetadata(selectedPhotoMetadata)
+                    : undefined
+                }
                 photo={selectedPhoto}
                 viewerState={viewerState}
                 onViewerChange={setViewerState}
@@ -1142,7 +1146,7 @@ function App() {
                 onClick={() => setShowImageValues((current) => !current)}
                 type="button"
               >
-                {showImageValues ? "Hide Image Data" : "Show Image Data"}
+                {showImageValues ? "Hide In-Image Data" : "Show In-Image Data"}
               </button>
             </div>
             {selectedPhoto ? (
@@ -1170,24 +1174,22 @@ function App() {
                   </div>
                 </div>
 
-                {showImageValues ? (
-                  <div className="detail-list detail-list--metadata">
-                    {isSelectedPhotoMetadataLoading ? (
-                      <p className="muted-copy">Reading embedded image values…</p>
-                    ) : selectedPhotoMetadataError ? (
-                      <p className="muted-copy">{selectedPhotoMetadataError}</p>
-                    ) : selectedPhotoMetadata?.length ? (
-                      selectedPhotoMetadata.map((item) => (
-                        <div className="detail-list__row" key={`${item.label}:${item.value}`}>
-                          <span>{item.label}</span>
-                          <strong>{item.value}</strong>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="muted-copy">No embedded image values found for this file.</p>
-                    )}
-                  </div>
-                ) : null}
+                <div className="detail-list detail-list--metadata">
+                  {isSelectedPhotoMetadataLoading ? (
+                    <p className="muted-copy">Reading embedded image values…</p>
+                  ) : selectedPhotoMetadataError ? (
+                    <p className="muted-copy">{selectedPhotoMetadataError}</p>
+                  ) : selectedPhotoMetadata?.length ? (
+                    selectedPhotoMetadata.map((item) => (
+                      <div className="detail-list__row" key={`${item.label}:${item.value}`}>
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="muted-copy">No embedded image values found for this file.</p>
+                  )}
+                </div>
               </>
             ) : (
               <p className="muted-copy">No frame selected yet.</p>
