@@ -59,6 +59,7 @@ button {
 
 .inspector-shell {
   --topbar-height: auto;
+  position: relative;
   height: 100vh;
   display: grid;
   grid-template-rows: var(--topbar-height) 0.75rem 1fr;
@@ -244,6 +245,51 @@ button {
   background: var(--accent-soft);
   border-color: rgba(37, 99, 235, 0.28);
   color: #0f172a;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(8, 11, 17, 0.34);
+  cursor: progress;
+  pointer-events: auto;
+}
+
+.loading-overlay__panel {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  max-width: min(28rem, 100%);
+  padding: 0.9rem 1rem;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(8, 11, 17, 0.92);
+  color: #f8fafc;
+  box-shadow: 0 1rem 2.6rem rgba(8, 11, 17, 0.34);
+}
+
+.loading-overlay__panel strong {
+  display: block;
+}
+
+.loading-overlay__panel p {
+  margin: 0.12rem 0 0;
+  color: rgba(248, 250, 252, 0.68);
+  line-height: 1.4;
+}
+
+.loading-overlay__spinner {
+  width: 1.45rem;
+  height: 1.45rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 2px solid rgba(248, 250, 252, 0.24);
+  border-top-color: #ffffff;
+  animation: loading-spin 760ms linear infinite;
 }
 
 .workspace {
@@ -463,6 +509,17 @@ button {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.filmstrip__thumb-placeholder {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .filmstrip__meta {
@@ -846,6 +903,12 @@ body.is-dragging-photo-stage {
 .detail-list__row span,
 .shortcut-list__row span {
   color: var(--text-muted);
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 1240px) {

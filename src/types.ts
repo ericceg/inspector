@@ -15,6 +15,8 @@ export type PhotoMetadataValue = {
   value: string;
 };
 
+export type PreviewStatus = "ready" | "pending" | "loading" | "error";
+
 export type BackendPhoto = {
   id: string;
   path: string;
@@ -22,10 +24,20 @@ export type BackendPhoto = {
   extension: string;
   directory: string;
   previewPath: string;
+  previewReady: boolean;
+  isRaw: boolean;
   decision: PhotoDecision;
 };
 
+export type BackendPreview = {
+  path: string;
+  previewPath: string;
+  previewReady: boolean;
+};
+
 export type Photo = BackendPhoto & {
+  previewStatus: PreviewStatus;
+  previewError: string;
   url: string;
 };
 

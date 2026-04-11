@@ -63,6 +63,7 @@ export function PhotoStage({
   } | null>(null);
   const [viewportSize, setViewportSize] = useState<Size>({ width: 0, height: 0 });
   const [naturalSize, setNaturalSize] = useState<Size | null>(null);
+  const [hasImageError, setHasImageError] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -91,15 +92,21 @@ export function PhotoStage({
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    setHasImageError(false);
+    setNaturalSize(null);
+  }, [photo?.id, photo?.url]);
+
   useLayoutEffect(() => {
     const image = imageRef.current;
 
-    if (!photo) {
+    if (!photo?.url || photo.previewStatus !== "ready") {
       setNaturalSize(null);
       return;
     }
 
     if (!image || !image.complete || !image.naturalWidth || !image.naturalHeight) {
+      setNaturalSize(null);
       return;
     }
 
@@ -107,7 +114,7 @@ export function PhotoStage({
       width: image.naturalWidth,
       height: image.naturalHeight,
     });
-  }, [photo?.url, photo]);
+  }, [photo?.id, photo?.previewStatus, photo?.url]);
 
   const frame =
     naturalSize && viewportSize.width && viewportSize.height
@@ -119,13 +126,22 @@ export function PhotoStage({
       overlayMetadata?.find((item) => item.label === label)?.value ??
       (isMetadataLoading ? "…" : "—"),
   }));
+  const isPreviewReady =
+    photo?.previewStatus === "ready" && Boolean(photo.url) && !hasImageError;
+  const previewMessage = getPreviewMessage(photo, hasImageError);
 
   const handleImageLoad = (event: SyntheticEvent<HTMLImageElement>) => {
     const image = event.currentTarget;
+    setHasImageError(false);
     setNaturalSize({
       width: image.naturalWidth,
       height: image.naturalHeight,
     });
+  };
+
+  const handleImageError = () => {
+    setHasImageError(true);
+    setNaturalSize(null);
   };
 
   const applyZoom = (
@@ -294,25 +310,28 @@ export function PhotoStage({
                 ) : null}
               </div>
             </div>
-            <img
-              alt={photo.name}
-              className="photo-stage__image"
-              draggable={false}
-              onDragStart={(event) => event.preventDefault()}
-              onLoad={handleImageLoad}
-              ref={imageRef}
-              src={photo.url}
-              style={
-                frame
-                  ? {
-                      width: `${frame.width}px`,
-                      height: `${frame.height}px`,
-                      transform: `translate(${frame.left}px, ${frame.top}px)`,
-                    }
-                  : { opacity: 0 }
-              }
-            />
-            {frame ? (
+            {isPreviewReady ? (
+              <img
+                alt={photo.name}
+                className="photo-stage__image"
+                draggable={false}
+                onDragStart={(event) => event.preventDefault()}
+                onError={handleImageError}
+                onLoad={handleImageLoad}
+                ref={imageRef}
+                src={photo.url}
+                style={
+                  frame
+                    ? {
+                        width: `${frame.width}px`,
+                        height: `${frame.height}px`,
+                        transform: `translate(${frame.left}px, ${frame.top}px)`,
+                      }
+                    : { opacity: 0 }
+                }
+              />
+            ) : null}
+            {frame && isPreviewReady ? (
               <div className="photo-stage__hud">
                 <span>{Math.round(frame.normalized.zoom * 100)}%</span>
                 {naturalSize ? (
@@ -323,7 +342,7 @@ export function PhotoStage({
               </div>
             ) : (
               <div className="photo-stage__placeholder">
-                <p>Loading preview…</p>
+                <p>{previewMessage}</p>
               </div>
             )}
           </>
@@ -396,6 +415,27 @@ function getFitSize(viewport: Size, natural: Size) {
     width: natural.width * scale,
     height: natural.height * scale,
   };
+}
+
+function getPreviewMessage(photo: Photo | null, hasImageError: boolean) {
+  if (!photo) {
+    return "Loading preview...";
+  }
+
+  if (hasImageError) {
+    return "Preview file could not be opened.";
+  }
+
+  switch (photo.previewStatus) {
+    case "pending":
+      return photo.isRaw ? "Preparing RAW preview..." : "Loading preview...";
+    case "loading":
+      return photo.isRaw ? "Rendering RAW preview..." : "Loading preview...";
+    case "error":
+      return photo.previewError || "Could not render preview.";
+    case "ready":
+      return "Loading preview...";
+  }
 }
 
 function clamp(value: number, min: number, max: number) {

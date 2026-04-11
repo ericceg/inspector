@@ -21,7 +21,17 @@ struct PhotoEntry {
     extension: String,
     directory: String,
     preview_path: String,
+    preview_ready: bool,
+    is_raw: bool,
     decision: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PreviewEntry {
+    path: String,
+    preview_path: String,
+    preview_ready: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -55,7 +65,13 @@ struct MovedPhoto {
 }
 
 #[tauri::command]
-fn scan_photo_directory(path: String) -> Result<Vec<PhotoEntry>, String> {
+async fn scan_photo_directory(path: String) -> Result<Vec<PhotoEntry>, String> {
+    tauri::async_runtime::spawn_blocking(move || scan_photo_directory_blocking(path))
+        .await
+        .map_err(|error| format!("Could not scan the selected folder: {error}"))?
+}
+
+fn scan_photo_directory_blocking(path: String) -> Result<Vec<PhotoEntry>, String> {
     let root = PathBuf::from(&path);
 
     if !root.is_dir() {
@@ -98,8 +114,8 @@ fn scan_photo_directory(path: String) -> Result<Vec<PhotoEntry>, String> {
                 .unwrap_or_default()
                 .to_ascii_lowercase();
 
-            let preview_path = match resolve_preview_path(&canonical_path, &extension) {
-                Ok(preview_path) => preview_path,
+            let preview = match resolve_preview_path(&canonical_path, &extension, false) {
+                Ok(preview) => preview,
                 Err(error) => {
                     eprintln!("Skipping {}: {}", canonical_path.display(), error);
                     return None;
@@ -112,7 +128,9 @@ fn scan_photo_directory(path: String) -> Result<Vec<PhotoEntry>, String> {
                 name: file_name,
                 extension,
                 directory,
-                preview_path,
+                preview_path: preview.preview_path.to_string_lossy().to_string(),
+                preview_ready: preview.preview_ready,
+                is_raw: preview.is_raw,
                 decision: resolve_decision(&canonical_path, &canonical_root).to_string(),
             })
         })
@@ -125,6 +143,38 @@ fn scan_photo_directory(path: String) -> Result<Vec<PhotoEntry>, String> {
     });
 
     Ok(photos)
+}
+
+#[tauri::command]
+async fn render_photo_preview(path: String) -> Result<PreviewEntry, String> {
+    tauri::async_runtime::spawn_blocking(move || render_photo_preview_blocking(path))
+        .await
+        .map_err(|error| format!("Could not render the preview: {error}"))?
+}
+
+fn render_photo_preview_blocking(path: String) -> Result<PreviewEntry, String> {
+    let photo_path = PathBuf::from(&path);
+
+    if !photo_path.is_file() {
+        return Err("The selected photo is no longer available.".into());
+    }
+
+    let canonical_path = photo_path
+        .canonicalize()
+        .map_err(|error| format!("Could not read the selected photo: {error}"))?;
+    let extension = canonical_path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    let preview = resolve_preview_path(&canonical_path, &extension, true)?;
+
+    Ok(PreviewEntry {
+        path: canonical_path.to_string_lossy().to_string(),
+        preview_path: preview.preview_path.to_string_lossy().to_string(),
+        preview_ready: preview.preview_ready,
+    })
 }
 
 #[tauri::command]
@@ -147,7 +197,10 @@ fn move_photos_by_decision(
         let source_path = PathBuf::from(&decision.path);
 
         if !source_path.is_file() {
-            return Err(format!("Could not move missing file: {}", source_path.display()));
+            return Err(format!(
+                "Could not move missing file: {}",
+                source_path.display()
+            ));
         }
 
         let target_path =
@@ -365,11 +418,7 @@ fn extract_photo_metadata(path: &Path) -> Vec<PhotoMetadataValue> {
     values
 }
 
-fn push_metadata_value(
-    values: &mut Vec<PhotoMetadataValue>,
-    label: &str,
-    value: Option<String>,
-) {
+fn push_metadata_value(values: &mut Vec<PhotoMetadataValue>, label: &str, value: Option<String>) {
     if let Some(value) = value.filter(|value| !value.is_empty()) {
         values.push(PhotoMetadataValue {
             label: label.to_string(),
@@ -443,18 +492,40 @@ fn is_raw_extension(extension: &str) -> bool {
     )
 }
 
-fn resolve_preview_path(path: &Path, extension: &str) -> Result<String, String> {
+struct PreviewResolution {
+    preview_path: PathBuf,
+    preview_ready: bool,
+    is_raw: bool,
+}
+
+fn resolve_preview_path(
+    path: &Path,
+    extension: &str,
+    render_missing_raw: bool,
+) -> Result<PreviewResolution, String> {
     if is_browser_viewable_extension(extension) {
-        return Ok(path.to_string_lossy().to_string());
+        return Ok(PreviewResolution {
+            preview_path: path.to_path_buf(),
+            preview_ready: true,
+            is_raw: false,
+        });
+    }
+
+    if !is_raw_extension(extension) {
+        return Err("The selected file format is not supported.".into());
     }
 
     let preview_path = build_preview_cache_path(path, extension)?;
 
-    if !preview_path.is_file() {
+    if render_missing_raw && !preview_path.is_file() {
         generate_raw_preview(path, &preview_path)?;
     }
 
-    Ok(preview_path.to_string_lossy().to_string())
+    Ok(PreviewResolution {
+        preview_ready: preview_path.is_file(),
+        preview_path,
+        is_raw: true,
+    })
 }
 
 fn build_preview_cache_path(path: &Path, extension: &str) -> Result<PathBuf, String> {
@@ -580,6 +651,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             scan_photo_directory,
+            render_photo_preview,
             move_photos_by_decision,
             read_photo_metadata
         ])

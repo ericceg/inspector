@@ -6,12 +6,14 @@ import {
   useEffect,
   useEffectEvent,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { PhotoStage } from "./components/PhotoStage";
 import {
   type BackendPhoto,
+  type BackendPreview,
   type DecisionCounts,
   type FilterPillValue,
   type MovePhotoDecision,
@@ -89,13 +91,16 @@ function App() {
   const filmstripRef = useRef<HTMLDivElement | null>(null);
   const selectedFilmstripItemRef = useRef<HTMLButtonElement | null>(null);
   const isPersistingDecisionRef = useRef(false);
+  const previewRequestsRef = useRef<Set<string>>(new Set());
   const lastLeftRailWidthRef = useRef(DEFAULT_LEFT_RAIL_WIDTH);
   const lastRightRailWidthRef = useRef(DEFAULT_RIGHT_RAIL_WIDTH);
   const lastTopbarHeightRef = useRef(DEFAULT_TOPBAR_HEIGHT);
 
-  const counts = countDecisions(photos);
-  const filteredStripPhotos = photos.filter((photo) =>
-    matchesFilter(photo.decision, stripFilter),
+  const counts = useMemo(() => countDecisions(photos), [photos]);
+  const rawPreviewCounts = useMemo(() => countRawPreviewStates(photos), [photos]);
+  const filteredStripPhotos = useMemo(
+    () => photos.filter((photo) => matchesFilter(photo.decision, stripFilter)),
+    [photos, stripFilter],
   );
   const isAllFilterSelected = isAllStripFilter(stripFilter);
   const navigablePhotos = filteredStripPhotos;
@@ -446,6 +451,54 @@ function App() {
     }
   });
 
+  const loadPhotoPreview = useEffectEvent(async (photo: Photo) => {
+    if (
+      !photo.isRaw ||
+      photo.previewStatus !== "pending" ||
+      previewRequestsRef.current.has(photo.id)
+    ) {
+      return;
+    }
+
+    previewRequestsRef.current.add(photo.id);
+    setPhotos((current) =>
+      updatePhotoPreviewState(current, photo.id, {
+        previewError: "",
+        previewStatus: "loading",
+      }),
+    );
+
+    try {
+      const preview = await invoke<BackendPreview>("render_photo_preview", {
+        path: photo.path,
+      });
+
+      setPhotos((current) =>
+        updatePhotoPreviewState(current, photo.id, {
+          previewError: "",
+          previewPath: preview.previewPath,
+          previewStatus: preview.previewReady ? "ready" : "pending",
+          url: preview.previewReady ? convertFileSrc(preview.previewPath) : "",
+        }),
+      );
+    } catch (error) {
+      const nextError =
+        error instanceof Error
+          ? error.message
+          : "Could not render the RAW preview.";
+
+      setPhotos((current) =>
+        updatePhotoPreviewState(current, photo.id, {
+          previewError: nextError,
+          previewStatus: "error",
+          url: "",
+        }),
+      );
+    } finally {
+      previewRequestsRef.current.delete(photo.id);
+    }
+  });
+
   const adjustZoom = (factor: number) => {
     setViewerState((current) => ({
       ...current,
@@ -573,6 +626,27 @@ function App() {
       void loadPhotoMetadata(comparePhoto);
     }
   }, [comparePhoto, loadPhotoMetadata, selectedPhoto, showImageValues]);
+
+  useEffect(() => {
+    const previewCandidates = pickPreviewCandidates({
+      comparePhoto,
+      navigablePhotos,
+      selectedNavigableIndex,
+      selectedPhoto,
+      showCompare,
+    });
+
+    for (const photo of previewCandidates) {
+      void loadPhotoPreview(photo);
+    }
+  }, [
+    comparePhoto,
+    loadPhotoPreview,
+    navigablePhotos,
+    selectedNavigableIndex,
+    selectedPhoto,
+    showCompare,
+  ]);
 
   useLayoutEffect(() => {
     if (isLeftRailCollapsed) {
@@ -735,6 +809,7 @@ function App() {
   const shellStyle = {
     "--topbar-height": `${isTopbarCollapsed ? 0 : topbarHeight ?? DEFAULT_TOPBAR_HEIGHT}px`,
   } as CSSProperties;
+  const rawPreviewStatusText = formatRawPreviewStatus(rawPreviewCounts);
 
   return (
     <main
@@ -748,6 +823,18 @@ function App() {
         .join(" ")}
       style={shellStyle}
     >
+      {isLoading ? (
+        <div aria-live="polite" className="loading-overlay" role="status">
+          <div className="loading-overlay__panel">
+            <span aria-hidden="true" className="loading-overlay__spinner" />
+            <div>
+              <strong>Loading folder</strong>
+              <p>Scanning files. RAW previews render as frames open.</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <header ref={topbarRef} className="topbar">
         <div className="topbar__brand">
           <p className="topbar__eyebrow">Photo Review</p>
@@ -828,7 +915,10 @@ function App() {
               </p>
             ) : null}
             <p className="session-note">
-              Ratings sort into pick, hold, and reject folders as you go.
+              {isLoading
+                ? "Scanning files. RAW previews render after the list opens."
+                : rawPreviewStatusText ||
+                  "Ratings sort into pick, hold, and reject folders as you go."}
             </p>
             {loadError ? <p className="session-error">{loadError}</p> : null}
           </div>
@@ -886,12 +976,18 @@ function App() {
                       type="button"
                     >
                       <div className="filmstrip__thumb">
-                        <img
-                          src={photo.url}
-                          alt={photo.name}
-                          loading="lazy"
-                          draggable={false}
-                        />
+                        {photo.previewStatus === "ready" && photo.url ? (
+                          <img
+                            src={photo.url}
+                            alt={photo.name}
+                            loading="lazy"
+                            draggable={false}
+                          />
+                        ) : (
+                          <span className="filmstrip__thumb-placeholder">
+                            {photo.previewStatus === "error" ? "RAW failed" : "RAW"}
+                          </span>
+                        )}
                       </div>
 
                       <div className="filmstrip__meta">
@@ -1188,9 +1284,13 @@ function findPhotoIndex(photos: Photo[], photoId: string) {
 }
 
 function createPhoto(photo: BackendPhoto): Photo {
+  const previewStatus = photo.previewReady ? "ready" : "pending";
+
   return {
     ...photo,
-    url: convertFileSrc(photo.previewPath),
+    previewError: "",
+    previewStatus,
+    url: photo.previewReady ? convertFileSrc(photo.previewPath) : "",
   };
 }
 
@@ -1202,6 +1302,36 @@ function countDecisions(photos: Photo[]): DecisionCounts {
     },
     { pick: 0, hold: 0, reject: 0, unrated: 0 },
   );
+}
+
+function countRawPreviewStates(photos: Photo[]) {
+  return photos.reduce(
+    (counts, photo) => {
+      if (!photo.isRaw || photo.previewStatus === "ready") {
+        return counts;
+      }
+
+      counts[photo.previewStatus] += 1;
+      return counts;
+    },
+    { pending: 0, loading: 0, error: 0 },
+  );
+}
+
+function formatRawPreviewStatus(counts: ReturnType<typeof countRawPreviewStates>) {
+  if (counts.loading > 0) {
+    return `Rendering ${counts.loading} RAW preview${counts.loading === 1 ? "" : "s"}.`;
+  }
+
+  if (counts.pending > 0) {
+    return `${counts.pending} RAW preview${counts.pending === 1 ? "" : "s"} waiting.`;
+  }
+
+  if (counts.error > 0) {
+    return `${counts.error} RAW preview${counts.error === 1 ? "" : "s"} could not render.`;
+  }
+
+  return "";
 }
 
 function pickStageOverlayMetadata(metadata: PhotoMetadataValue[] | undefined) {
@@ -1276,6 +1406,68 @@ function findNextSelectionId({
   );
 }
 
+function pickPreviewCandidates({
+  comparePhoto,
+  navigablePhotos,
+  selectedNavigableIndex,
+  selectedPhoto,
+  showCompare,
+}: {
+  comparePhoto: Photo | null;
+  navigablePhotos: Photo[];
+  selectedNavigableIndex: number;
+  selectedPhoto: Photo | null;
+  showCompare: boolean;
+}) {
+  const candidates: Photo[] = [];
+  const seen = new Set<string>();
+  const addCandidate = (photo: Photo | null | undefined) => {
+    if (
+      !photo ||
+      !photo.isRaw ||
+      photo.previewStatus !== "pending" ||
+      seen.has(photo.id)
+    ) {
+      return;
+    }
+
+    seen.add(photo.id);
+    candidates.push(photo);
+  };
+
+  addCandidate(selectedPhoto);
+
+  if (showCompare) {
+    addCandidate(comparePhoto);
+  }
+
+  if (selectedNavigableIndex !== -1) {
+    addCandidate(navigablePhotos[selectedNavigableIndex + 1]);
+    addCandidate(navigablePhotos[selectedNavigableIndex + 2]);
+  }
+
+  return candidates;
+}
+
+function updatePhotoPreviewState(
+  photos: Photo[],
+  photoId: string,
+  updates: Partial<Pick<Photo, "previewError" | "previewPath" | "previewStatus" | "url">>,
+) {
+  let didUpdate = false;
+
+  const nextPhotos = photos.map((photo) => {
+    if (photo.id !== photoId) {
+      return photo;
+    }
+
+    didUpdate = true;
+    return { ...photo, ...updates };
+  });
+
+  return didUpdate ? nextPhotos : photos;
+}
+
 function summarizePath(path: string) {
   const parts = path.split(/[/\\]/).filter(Boolean);
   return parts.slice(-2).join(" / ") || path;
@@ -1298,6 +1490,9 @@ function applyMovedPhotos(photos: Photo[], movedPhotos: MovedPhoto[]) {
       const nextPreviewPath = isBrowserViewableExtension(photo.extension)
         ? destinationPath
         : photo.previewPath;
+      const nextUrl = photo.previewStatus === "ready"
+        ? convertFileSrc(nextPreviewPath)
+        : "";
 
       return {
         ...photo,
@@ -1305,7 +1500,7 @@ function applyMovedPhotos(photos: Photo[], movedPhotos: MovedPhoto[]) {
         path: destinationPath,
         directory: parentPath(destinationPath),
         previewPath: nextPreviewPath,
-        url: convertFileSrc(nextPreviewPath),
+        url: nextUrl,
         decision: movedPhoto.decision,
       };
     }),
