@@ -581,18 +581,33 @@ button {
 }
 
 .photo-stage {
+  --decision-color: var(--unrated);
   min-width: 0;
   min-height: 0;
   display: grid;
   grid-template-rows: auto 1fr;
-  border: 1px solid var(--viewer-border);
+  box-sizing: border-box;
+  border: 6px solid var(--decision-color);
   border-radius: 0;
   overflow: hidden;
   background: var(--viewer-surface);
+  transition: border-color 160ms ease;
 }
 
-.photo-stage--primary {
-  border-color: rgba(37, 99, 235, 0.45);
+.photo-stage--pick {
+  --decision-color: var(--pick);
+}
+
+.photo-stage--hold {
+  --decision-color: var(--hold);
+}
+
+.photo-stage--reject {
+  --decision-color: var(--reject);
+}
+
+.photo-stage--unrated {
+  --decision-color: var(--unrated);
 }
 
 .photo-stage__header {

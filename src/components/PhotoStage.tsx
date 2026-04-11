@@ -261,9 +261,13 @@ export function PhotoStage({
   return (
     <article
       className={
-        emphasis === "primary"
-          ? "photo-stage photo-stage--primary"
-          : "photo-stage"
+        [
+          "photo-stage",
+          `photo-stage--${decision}`,
+          emphasis === "primary" ? "photo-stage--primary" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")
       }
     >
       <header className="photo-stage__header">
