@@ -1,5 +1,6 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { message, open } from "@tauri-apps/plugin-dialog";
+import { flushSync } from "react-dom";
 import {
   type CSSProperties,
   startTransition,
@@ -261,8 +262,8 @@ function App() {
         decisions: [{ path: selectedPhoto.path, decision }],
       });
       const nextPhotos = applyMovedPhotos(photos, summary.movedPhotos);
-      const currentMovedPhoto = summary.movedPhotos.find(
-        (movedPhoto) => movedPhoto.sourcePath === selectedPhoto.path,
+      const currentMovedPhoto = summary.movedPhotos.find((movedPhoto) =>
+        matchesMovedPhotoPath(movedPhoto, selectedPhoto.path),
       );
       const nextCurrentPhotoId =
         currentMovedPhoto?.destinationPath ?? selectedPhoto.id;
@@ -280,7 +281,7 @@ function App() {
         : nextCurrentPhotoId;
 
       setLoadError("");
-      startTransition(() => {
+      flushSync(() => {
         setPhotos(nextPhotos);
         if (!advanceSelection) {
           setStripFilter((current) =>
@@ -294,11 +295,10 @@ function App() {
         setMetadataByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
         setMetadataErrorsByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
         setMetadataLoadingByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
+        if (nextSelectedId) {
+          setSelectedIndex(findPhotoIndex(nextPhotos, nextSelectedId));
+        }
       });
-
-      if (nextSelectedId) {
-        setSelectedIndex(findPhotoIndex(nextPhotos, nextSelectedId));
-      }
     } catch (error) {
       const nextError =
         error instanceof Error ? error.message : "The photo could not be moved.";
@@ -348,19 +348,14 @@ function App() {
         nextPhotos[clamp(selectedIndex, 0, Math.max(nextPhotos.length - 1, 0))]?.id;
 
       setLoadError("");
-      startTransition(() => {
+      flushSync(() => {
         setPhotos(nextPhotos);
         setStripFilter(createAllStripFilter());
         setMetadataByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
         setMetadataErrorsByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
         setMetadataLoadingByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
+        setSelectedIndex(fallbackPhotoId ? findPhotoIndex(nextPhotos, fallbackPhotoId) : 0);
       });
-
-      if (fallbackPhotoId) {
-        setSelectedIndex(findPhotoIndex(nextPhotos, fallbackPhotoId));
-      } else {
-        setSelectedIndex(0);
-      }
     } catch (error) {
       const nextError =
         error instanceof Error ? error.message : "The ratings could not be cleared.";
@@ -1496,9 +1491,13 @@ function summarizePath(path: string) {
 }
 
 function applyMovedPhotos(photos: Photo[], movedPhotos: MovedPhoto[]) {
-  const movedPhotoMap = new Map(
-    movedPhotos.map((entry) => [entry.sourcePath, entry]),
-  );
+  const movedPhotoMap = new Map<string, MovedPhoto>();
+
+  for (const movedPhoto of movedPhotos) {
+    for (const sourcePath of getMovedPhotoSourcePaths(movedPhoto)) {
+      movedPhotoMap.set(sourcePath, movedPhoto);
+    }
+  }
 
   return sortPhotosByName(
     photos.map((photo) => {
@@ -1551,10 +1550,13 @@ function remapPhotoState<T>(current: Record<string, T>, movedPhotos: MovedPhoto[
   let nextState = current;
 
   for (const movedPhoto of movedPhotos) {
-    if (
-      movedPhoto.sourcePath === movedPhoto.destinationPath ||
-      !Object.prototype.hasOwnProperty.call(nextState, movedPhoto.sourcePath)
-    ) {
+    const sourcePath = getMovedPhotoSourcePaths(movedPhoto).find(
+      (sourcePath) =>
+        sourcePath !== movedPhoto.destinationPath &&
+        Object.prototype.hasOwnProperty.call(nextState, sourcePath),
+    );
+
+    if (!sourcePath) {
       continue;
     }
 
@@ -1562,11 +1564,23 @@ function remapPhotoState<T>(current: Record<string, T>, movedPhotos: MovedPhoto[
       nextState = { ...current };
     }
 
-    nextState[movedPhoto.destinationPath] = nextState[movedPhoto.sourcePath];
-    delete nextState[movedPhoto.sourcePath];
+    nextState[movedPhoto.destinationPath] = nextState[sourcePath];
+    for (const sourcePath of getMovedPhotoSourcePaths(movedPhoto)) {
+      delete nextState[sourcePath];
+    }
   }
 
   return nextState;
+}
+
+function matchesMovedPhotoPath(movedPhoto: MovedPhoto, path: string) {
+  return getMovedPhotoSourcePaths(movedPhoto).includes(path);
+}
+
+function getMovedPhotoSourcePaths(movedPhoto: MovedPhoto) {
+  return [movedPhoto.sourcePath, movedPhoto.requestedSourcePath].filter(
+    (sourcePath): sourcePath is string => Boolean(sourcePath),
+  );
 }
 
 function isBrowserViewableExtension(extension: string) {

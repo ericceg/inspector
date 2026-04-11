@@ -60,6 +60,7 @@ struct MoveSummary {
 #[serde(rename_all = "camelCase")]
 struct MovedPhoto {
     source_path: String,
+    requested_source_path: String,
     destination_path: String,
     decision: String,
 }
@@ -194,17 +195,13 @@ fn move_photos_by_decision(
     let mut moved_photos = Vec::with_capacity(total_count);
 
     for decision in decisions.iter() {
-        let source_path = PathBuf::from(&decision.path);
-
-        if !source_path.is_file() {
-            return Err(format!(
-                "Could not move missing file: {}",
-                source_path.display()
-            ));
-        }
+        let requested_source_path = PathBuf::from(&decision.path);
+        let normalized_decision = normalize_decision(&decision.decision)?;
+        let source_path =
+            resolve_existing_photo_path(&canonical_source_root, &requested_source_path)?;
 
         let target_path =
-            build_target_path(&canonical_source_root, &source_path, &decision.decision)?;
+            build_target_path(&canonical_source_root, &source_path, normalized_decision)?;
 
         if source_path != target_path {
             move_file(&source_path, &target_path).map_err(|error| {
@@ -219,8 +216,9 @@ fn move_photos_by_decision(
 
         moved_photos.push(MovedPhoto {
             source_path: source_path.to_string_lossy().to_string(),
+            requested_source_path: requested_source_path.to_string_lossy().to_string(),
             destination_path: target_path.to_string_lossy().to_string(),
-            decision: normalize_decision(&decision.decision)?.to_string(),
+            decision: normalized_decision.to_string(),
         });
     }
 
@@ -301,12 +299,52 @@ fn normalize_decision(decision: &str) -> Result<&'static str, String> {
     }
 }
 
+fn resolve_existing_photo_path(
+    source_root: &Path,
+    requested_path: &Path,
+) -> Result<PathBuf, String> {
+    if requested_path.is_file() {
+        return requested_path
+            .canonicalize()
+            .map_err(|error| format!("Could not read {}: {error}", requested_path.display()));
+    }
+
+    let relative_path = normalize_relative_path(requested_path, source_root)
+        .or_else(|| requested_path.file_name().map(PathBuf::from))
+        .ok_or_else(|| {
+            format!(
+                "Could not determine organization path for {}",
+                requested_path.display()
+            )
+        })?;
+
+    let mut candidates = Vec::with_capacity(4);
+    candidates.push(source_root.join(&relative_path));
+    candidates.extend(
+        ["pick", "hold", "reject"]
+            .iter()
+            .map(|folder| source_root.join(folder).join(&relative_path)),
+    );
+
+    for candidate in candidates {
+        if candidate.is_file() {
+            return candidate
+                .canonicalize()
+                .map_err(|error| format!("Could not read {}: {error}", candidate.display()));
+        }
+    }
+
+    Err(format!(
+        "Could not move missing file: {}",
+        requested_path.display()
+    ))
+}
+
 fn build_target_path(
     source_root: &Path,
     source_path: &Path,
-    decision: &str,
+    normalized_decision: &str,
 ) -> Result<PathBuf, String> {
-    let normalized_decision = normalize_decision(decision)?;
     let relative_path = normalize_relative_path(source_path, source_root)
         .or_else(|| source_path.file_name().map(PathBuf::from))
         .ok_or_else(|| {

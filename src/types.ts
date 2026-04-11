@@ -50,6 +50,7 @@ export type MovePhotoDecision = {
 
 export type MovedPhoto = {
   sourcePath: string;
+  requestedSourcePath?: string;
   destinationPath: string;
   decision: PhotoDecision;
 };
