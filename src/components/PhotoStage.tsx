@@ -270,8 +270,6 @@ export function PhotoStage({
         ref={viewportRef}
         className={[
           "photo-stage__viewport",
-          emphasis === "secondary" ? "photo-stage__viewport--status" : "",
-          emphasis === "secondary" ? `photo-stage__viewport--${decision}` : "",
           frame && frame.normalized.zoom > 1.001 ? "is-draggable" : "",
         ]
           .filter(Boolean)

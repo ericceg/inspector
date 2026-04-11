@@ -130,8 +130,7 @@ function App() {
   const isComparePhotoMetadataLoading = comparePhoto
     ? metadataLoadingByPhotoId[comparePhoto.id] === true
     : false;
-  const isFocusView =
-    isTopbarCollapsed && isLeftRailCollapsed && isRightRailCollapsed;
+  const isFocusView = isLeftRailCollapsed && isRightRailCollapsed;
 
   const toggleStripFilter = (value: FilterPillValue) => {
     setStripFilter((current) => {
@@ -372,7 +371,6 @@ function App() {
 
   const toggleFocusView = () => {
     const nextCollapsed = !isFocusView;
-    setIsTopbarCollapsed(nextCollapsed);
     setIsLeftRailCollapsed(nextCollapsed);
     setIsRightRailCollapsed(nextCollapsed);
   };
@@ -827,6 +825,41 @@ function App() {
     "--topbar-height": `${isTopbarCollapsed ? 0 : topbarHeight ?? DEFAULT_TOPBAR_HEIGHT}px`,
   } as CSSProperties;
   const rawPreviewStatusText = formatRawPreviewStatus(rawPreviewCounts);
+  const renderViewerControls = () => (
+    <>
+      <button
+        className={isFocusView ? "button is-active" : "button"}
+        onClick={toggleFocusView}
+        type="button"
+      >
+        {isFocusView ? "Restore Layout" : "Maximize View"}
+      </button>
+      <button
+        className="button"
+        onClick={() => setShowCompare((current) => !current)}
+        disabled={!comparePhoto}
+        type="button"
+      >
+        {showCompare ? "Single View" : "Compare"}
+      </button>
+      <button
+        className="button"
+        onClick={() => adjustZoom(1 / 1.18)}
+        disabled={!selectedPhoto}
+        type="button"
+      >
+        Zoom Out
+      </button>
+      <button
+        className="button"
+        onClick={() => adjustZoom(1.18)}
+        disabled={!selectedPhoto}
+        type="button"
+      >
+        Zoom In
+      </button>
+    </>
+  );
 
   return (
     <main
@@ -834,7 +867,6 @@ function App() {
       className={[
         "inspector-shell",
         isTopbarCollapsed ? "is-topbar-collapsed" : "",
-        isFocusView ? "is-focus-view" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -863,6 +895,7 @@ function App() {
         </div>
 
         <div className="topbar__actions">
+          {renderViewerControls()}
           <button
             className="button button--primary"
             onClick={() => void loadFolder()}
@@ -1036,60 +1069,15 @@ function App() {
         />
 
         <section className="viewer">
-          <div className="viewer__toolbar">
-            <div>
-              <p className="section-label">Compare</p>
-              <h2>
-                {selectedPhoto
-                  ? showCompare && comparePhoto
-                    ? "Previous and current frame"
-                    : "Current frame"
-                  : "Open a folder"}
-              </h2>
-            </div>
-
-            <div className="viewer__toolbar-actions">
-              <button
-                className={isFocusView ? "button is-active" : "button"}
-                onClick={toggleFocusView}
-                type="button"
-              >
-                {isFocusView ? "Restore Layout" : "Maximize View"}
-              </button>
-              <button
-                className="button"
-                onClick={() => setShowCompare((current) => !current)}
-                disabled={!comparePhoto}
-                type="button"
-              >
-                {showCompare ? "Single View" : "Compare"}
-              </button>
-              <button
-                className="button"
-                onClick={() => adjustZoom(1 / 1.18)}
-                disabled={!selectedPhoto}
-                type="button"
-              >
-                Zoom Out
-              </button>
-              <button
-                className="button"
-                onClick={() => adjustZoom(1.18)}
-                disabled={!selectedPhoto}
-                type="button"
-              >
-                Zoom In
-              </button>
-            </div>
-          </div>
-
           {photos.length ? (
             <div
-              className={
-                showCompare && comparePhoto
-                  ? "compare-grid"
-                  : "compare-grid compare-grid--single"
-              }
+              className={[
+                "compare-grid",
+                showCompare && comparePhoto ? "" : "compare-grid--single",
+                `compare-grid--${activeDecision}`,
+              ]
+                .filter(Boolean)
+                .join(" ")}
             >
               {showCompare && comparePhoto ? (
                 <PhotoStage
