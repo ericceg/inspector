@@ -92,7 +92,7 @@ export function PhotoStage({
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setHasImageError(false);
     setNaturalSize(null);
   }, [photo?.id, photo?.url]);
