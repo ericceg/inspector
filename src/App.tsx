@@ -237,13 +237,17 @@ function App() {
     setSelectedIndex(findPhotoIndex(photos, nextPhoto.id));
   };
 
-  const applyDecision = async (decision: PhotoDecision) => {
+  const applyDecision = async (
+    decision: PhotoDecision,
+    options: { advanceSelection?: boolean } = {},
+  ) => {
     if (!selectedPhoto || !folderPath || isPersistingDecisionRef.current) {
       return;
     }
 
+    const { advanceSelection = true } = options;
     const fallbackPhotoId =
-      isAllFilterSelected
+      advanceSelection && isAllFilterSelected
         ? photos[clamp(selectedIndex + 1, 0, Math.max(photos.length - 1, 0))]?.id ??
           selectedPhoto.id
         : undefined;
@@ -257,18 +261,36 @@ function App() {
         decisions: [{ path: selectedPhoto.path, decision }],
       });
       const nextPhotos = applyMovedPhotos(photos, summary.movedPhotos);
-      const nextSelectedId = findNextSelectionId({
-        photos: nextPhotos,
-        currentFilteredPhotos: filteredStripPhotos,
-        currentSelectedId: selectedPhoto.id,
-        stripFilter,
-        isAllFilterSelected,
-        fallbackPhotoId,
-      });
+      const currentMovedPhoto = summary.movedPhotos.find(
+        (movedPhoto) => movedPhoto.sourcePath === selectedPhoto.path,
+      );
+      const nextCurrentPhotoId =
+        currentMovedPhoto?.destinationPath ?? selectedPhoto.id;
+      const nextFallbackPhotoId =
+        fallbackPhotoId === selectedPhoto.id ? nextCurrentPhotoId : fallbackPhotoId;
+      const nextSelectedId = advanceSelection
+        ? findNextSelectionId({
+            photos: nextPhotos,
+            currentFilteredPhotos: filteredStripPhotos,
+            currentSelectedId: selectedPhoto.id,
+            stripFilter,
+            isAllFilterSelected,
+            fallbackPhotoId: nextFallbackPhotoId,
+          })
+        : nextCurrentPhotoId;
 
       setLoadError("");
       startTransition(() => {
         setPhotos(nextPhotos);
+        if (!advanceSelection) {
+          setStripFilter((current) =>
+            current.includes(decision)
+              ? current
+              : FILTERABLE_DECISIONS.filter(
+                  (entry) => current.includes(entry) || entry === decision,
+                ),
+          );
+        }
         setMetadataByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
         setMetadataErrorsByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
         setMetadataLoadingByPhotoId((current) => remapPhotoState(current, summary.movedPhotos));
@@ -296,7 +318,7 @@ function App() {
       return;
     }
 
-    void applyDecision("unrated");
+    void applyDecision("unrated", { advanceSelection: false });
   };
 
   const clearAllDecisions = async () => {
