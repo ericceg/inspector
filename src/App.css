@@ -160,8 +160,7 @@ button {
 }
 
 .topbar__eyebrow,
-.section-label,
-.photo-stage__eyebrow {
+.section-label {
   margin: 0;
   color: var(--accent);
   text-transform: uppercase;
@@ -585,7 +584,7 @@ button {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: 1fr;
   box-sizing: border-box;
   border: 6px solid var(--decision-color);
   border-radius: 0;
@@ -608,26 +607,6 @@ button {
 
 .photo-stage--unrated {
   --decision-color: var(--unrated);
-}
-
-.photo-stage__header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.85rem 0.95rem 0.8rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.photo-stage__header h3 {
-  margin: 0.25rem 0 0;
-  font-size: 1rem;
-  color: #f8fafc;
-}
-
-.photo-stage__name {
-  color: var(--viewer-muted);
-  font-size: 0.82rem;
 }
 
 .photo-stage__viewport {

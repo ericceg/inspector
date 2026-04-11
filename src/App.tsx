@@ -1093,10 +1093,8 @@ function App() {
             >
               {showCompare && comparePhoto ? (
                 <PhotoStage
-                  detail="Reference"
                   decision={compareDecision}
                   isMetadataLoading={isComparePhotoMetadataLoading}
-                  label="Previous frame"
                   overlayMetadata={
                     showImageValues
                       ? pickStageOverlayMetadata(comparePhotoMetadata)
@@ -1109,11 +1107,9 @@ function App() {
                 />
               ) : null}
               <PhotoStage
-                detail={showCompare && comparePhoto ? "Active" : "Selected"}
                 decision={activeDecision}
                 emphasis="primary"
                 isMetadataLoading={isSelectedPhotoMetadataLoading}
-                label="Current frame"
                 overlayMetadata={
                   showImageValues
                     ? pickStageOverlayMetadata(selectedPhotoMetadata)

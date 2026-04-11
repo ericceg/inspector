@@ -27,11 +27,9 @@ type FrameMetrics = {
 };
 
 type PhotoStageProps = {
-  detail: string;
   decision: PhotoDecision;
   emphasis?: "primary" | "secondary";
   isMetadataLoading?: boolean;
-  label: string;
   overlayMetadata?: PhotoMetadataValue[];
   photo: Photo | null;
   showMetadataOverlay?: boolean;
@@ -42,11 +40,9 @@ type PhotoStageProps = {
 const OVERLAY_METADATA_LABELS = ["ISO", "Aperture", "Shutter"] as const;
 
 export function PhotoStage({
-  detail,
   decision,
   emphasis = "secondary",
   isMetadataLoading = false,
-  label,
   overlayMetadata,
   photo,
   showMetadataOverlay = false,
@@ -270,14 +266,6 @@ export function PhotoStage({
           .join(" ")
       }
     >
-      <header className="photo-stage__header">
-        <div>
-          <p className="photo-stage__eyebrow">{detail}</p>
-          <h3>{label}</h3>
-        </div>
-        {photo ? <span className="photo-stage__name">{photo.name}</span> : null}
-      </header>
-
       <div
         ref={viewportRef}
         className={[
