@@ -21,6 +21,14 @@ Do the whole selection process just using the keyboard while Inspector sorts fil
 
 Download the latest prebuilt app for macOS, Windows, or Linux from the [GitHub releases page](https://github.com/ericceg/inspector/releases/latest).
 
+
+On macOS you'll need to remove the quarantine flag after installation, otherwise macOS may report the app as corrupted:
+
+```bash
+sudo xattr -dr com.apple.quarantine /Applications/Inspector.app
+```
+
+
 ## Why I Made This
 
 When I am reviewing a shoot, I usually care about a very specific region: eyes in a portrait, sharpness on a product edge, motion blur in a hand, or whether two nearly identical frames differ in some small way.
