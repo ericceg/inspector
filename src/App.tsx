@@ -31,7 +31,6 @@ import "./App.css";
 const FILTERABLE_DECISIONS: PhotoDecision[] = ["pick", "hold", "reject", "unrated"];
 
 const FILTERS: Array<{ value: FilterPillValue; label: string }> = [
-  { value: "all", label: "All" },
   { value: "pick", label: "Picks" },
   { value: "hold", label: "Hold" },
   { value: "reject", label: "Rejects" },
@@ -134,22 +133,13 @@ function App() {
 
   const toggleStripFilter = (value: FilterPillValue) => {
     setStripFilter((current) => {
-      if (value === "all") {
-        return createAllStripFilter();
-      }
-
       if (current.includes(value)) {
-        const next = current.filter((entry) => entry !== value);
-        return next.length ? next : createAllStripFilter();
+        return current.filter((entry) => entry !== value);
       }
 
-      const next = FILTERABLE_DECISIONS.filter(
+      return FILTERABLE_DECISIONS.filter(
         (decision) => current.includes(decision) || decision === value,
       );
-
-      return next.length === FILTERABLE_DECISIONS.length
-        ? createAllStripFilter()
-        : next;
     });
   };
 
@@ -1355,14 +1345,10 @@ function isAllStripFilter(filter: StripFilter) {
 }
 
 function isFilterActive(filter: StripFilter, value: FilterPillValue) {
-  return value === "all" ? isAllStripFilter(filter) : filter.includes(value);
+  return filter.includes(value);
 }
 
 function countForFilter(counts: DecisionCounts, filter: FilterPillValue) {
-  if (filter === "all") {
-    return counts.pick + counts.hold + counts.reject + counts.unrated;
-  }
-
   return counts[filter];
 }
 

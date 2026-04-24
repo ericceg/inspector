@@ -1,6 +1,6 @@
 export type PhotoDecision = "pick" | "hold" | "reject" | "unrated";
 
-export type FilterPillValue = "all" | PhotoDecision;
+export type FilterPillValue = PhotoDecision;
 
 export type StripFilter = PhotoDecision[];
 
