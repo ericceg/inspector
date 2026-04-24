@@ -110,8 +110,8 @@ function App() {
     ? navigablePhotos.findIndex((photo) => photo.id === selectedPhoto.id)
     : -1;
   const comparePhoto =
-    selectedNavigableIndex > 0
-      ? navigablePhotos[selectedNavigableIndex - 1]
+    selectedNavigableIndex >= 0
+      ? navigablePhotos[selectedNavigableIndex + 1] ?? null
       : null;
   const compareDecision = comparePhoto?.decision ?? "unrated";
   const activeDecision = selectedPhoto?.decision ?? "unrated";
@@ -837,7 +837,7 @@ function App() {
       <button
         className="button"
         onClick={() => setShowCompare((current) => !current)}
-        disabled={!comparePhoto}
+        disabled={!showCompare && !comparePhoto}
         type="button"
       >
         {showCompare ? "Single View" : "Compare"}
@@ -1079,6 +1079,20 @@ function App() {
                 .filter(Boolean)
                 .join(" ")}
             >
+              <PhotoStage
+                decision={activeDecision}
+                emphasis="primary"
+                isMetadataLoading={isSelectedPhotoMetadataLoading}
+                overlayMetadata={
+                  showImageValues
+                    ? pickStageOverlayMetadata(selectedPhotoMetadata)
+                    : undefined
+                }
+                photo={selectedPhoto}
+                showMetadataOverlay={showImageValues}
+                viewerState={viewerState}
+                onViewerChange={setViewerState}
+              />
               {showCompare && comparePhoto ? (
                 <PhotoStage
                   decision={compareDecision}
@@ -1094,20 +1108,6 @@ function App() {
                   onViewerChange={setViewerState}
                 />
               ) : null}
-              <PhotoStage
-                decision={activeDecision}
-                emphasis="primary"
-                isMetadataLoading={isSelectedPhotoMetadataLoading}
-                overlayMetadata={
-                  showImageValues
-                    ? pickStageOverlayMetadata(selectedPhotoMetadata)
-                    : undefined
-                }
-                photo={selectedPhoto}
-                showMetadataOverlay={showImageValues}
-                viewerState={viewerState}
-                onViewerChange={setViewerState}
-              />
             </div>
           ) : (
             <div className="empty-workspace">
