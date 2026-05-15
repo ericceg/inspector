@@ -1,6 +1,6 @@
 [package]
 name = "inspector"
-version = "0.1.3"
+version = "0.1.4"
 description = "Photo culling desktop app"
 authors = ["ericceglie"]
 license = "MIT"
