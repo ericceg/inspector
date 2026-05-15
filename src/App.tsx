@@ -64,7 +64,7 @@ function App() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [stripFilter, setStripFilter] = useState<StripFilter>(createAllStripFilter);
   const [showCompare, setShowCompare] = useState(false);
-  const [showImageValues, setShowImageValues] = useState(true);
+  const [showImageValues, setShowImageValues] = useState(false);
   const [isTopbarCollapsed, setIsTopbarCollapsed] = useState(false);
   const [isLeftRailCollapsed, setIsLeftRailCollapsed] = useState(false);
   const [isRightRailCollapsed, setIsRightRailCollapsed] = useState(false);
@@ -169,9 +169,9 @@ function App() {
         setSelectedIndex(0);
         setFolderPath(selectedPath);
         setViewerState(DEFAULT_VIEWER_STATE);
-        setLoadError("No viewable photos were found in that folder.");
+        setLoadError("No photos found.");
         await message(
-          "No supported photos or RAW files were found in the selected folder.",
+          "No supported photos found.",
           {
             title: "Nothing to review",
             kind: "warning",
@@ -867,8 +867,8 @@ function App() {
           <div className="loading-overlay__panel">
             <span aria-hidden="true" className="loading-overlay__spinner" />
             <div>
-              <strong>Loading folder</strong>
-              <p>Scanning files. RAW previews render as frames open.</p>
+              <strong>Loading</strong>
+              <p>Scanning files.</p>
             </div>
           </div>
         </div>
@@ -876,12 +876,9 @@ function App() {
 
       <header ref={topbarRef} className="topbar">
         <div className="topbar__brand">
-          <p className="topbar__eyebrow">Photo Review</p>
+          <p className="topbar__eyebrow">Review</p>
           <h1>Inspector</h1>
-          <p className="topbar__summary">
-            Open a folder, compare frames, and keep the zoom locked while you
-            move through the set.
-          </p>
+          <p className="topbar__summary">Fixed-crop photo culling.</p>
         </div>
 
         <div className="topbar__actions">
@@ -956,9 +953,9 @@ function App() {
             ) : null}
             <p className="session-note">
               {isLoading
-                ? "Scanning files. RAW previews render after the list opens."
+                ? "Scanning files."
                 : rawPreviewStatusText ||
-                  "Ratings sort into pick, hold, and reject folders as you go."}
+                  "Ratings sort files as you go."}
             </p>
             {loadError ? <p className="session-error">{loadError}</p> : null}
           </div>
@@ -1025,7 +1022,7 @@ function App() {
                           />
                         ) : (
                           <span className="filmstrip__thumb-placeholder">
-                            {photo.previewStatus === "error" ? "RAW failed" : "RAW"}
+                            {photo.previewStatus === "error" ? "Failed" : "RAW"}
                           </span>
                         )}
                       </div>
@@ -1113,12 +1110,9 @@ function App() {
             </div>
           ) : (
             <div className="empty-workspace">
-              <p className="section-label">Start Here</p>
-              <h2>Review a shoot with a fixed crop.</h2>
-              <p>
-                Load a folder, zoom into the detail you care about, then move
-                through the set without resetting the view.
-              </p>
+              <p className="section-label">Start</p>
+              <h2>Open a folder.</h2>
+              <p>Set a crop once. Review faster.</p>
               <button
                 className="button button--primary"
                 onClick={() => void loadFolder()}
@@ -1192,7 +1186,7 @@ function App() {
                 onClick={() => setShowImageValues((current) => !current)}
                 type="button"
               >
-                {showImageValues ? "Hide In-Image Data" : "Show In-Image Data"}
+                {showImageValues ? "Hide Data" : "Show Data"}
               </button>
             </div>
             {selectedPhoto ? (
@@ -1228,7 +1222,7 @@ function App() {
 
                 <div className="detail-list detail-list--metadata">
                   {isSelectedPhotoMetadataLoading ? (
-                    <p className="muted-copy">Reading embedded image values…</p>
+                    <p className="muted-copy">Reading data…</p>
                   ) : selectedPhotoMetadataError ? (
                     <p className="muted-copy">{selectedPhotoMetadataError}</p>
                   ) : selectedPhotoMetadata?.length ? (
@@ -1239,12 +1233,12 @@ function App() {
                       </div>
                     ))
                   ) : (
-                    <p className="muted-copy">No embedded image values found for this file.</p>
+                    <p className="muted-copy">No image data.</p>
                   )}
                 </div>
               </>
             ) : (
-              <p className="muted-copy">No frame selected yet.</p>
+              <p className="muted-copy">No selection.</p>
             )}
           </div>
 
@@ -1252,11 +1246,11 @@ function App() {
             <p className="section-label">Keyboard</p>
             <div className="shortcut-list">
               <div className="shortcut-list__row">
-                <span>Next / Previous</span>
+                <span>Navigate</span>
                 <strong>← → or H J K L</strong>
               </div>
               <div className="shortcut-list__row">
-                <span>Pick / Hold / Reject</span>
+                <span>Rate</span>
                 <strong>1 / 2 / 3</strong>
               </div>
               <div className="shortcut-list__row">
@@ -1268,7 +1262,7 @@ function App() {
                 <strong>0</strong>
               </div>
               <div className="shortcut-list__row">
-                <span>Clear current status</span>
+                <span>Clear rating</span>
                 <strong>U</strong>
               </div>
               <div className="shortcut-list__row">

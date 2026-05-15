@@ -337,7 +337,7 @@ export function PhotoStage({
           </>
         ) : (
           <div className="photo-stage__placeholder">
-            <p>Move to the second frame to compare detail side-by-side.</p>
+            <p>No compare frame.</p>
           </div>
         )}
       </div>
