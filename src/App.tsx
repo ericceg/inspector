@@ -1032,6 +1032,18 @@ function App() {
 
                       <div className="filmstrip__meta">
                         <strong>{photo.name}</strong>
+                        {photo.formats.length > 1 ? (
+                          <div
+                            aria-label={`Available formats: ${photo.formats.join(", ")}`}
+                            className="format-badges"
+                          >
+                            {photo.formats.map((format) => (
+                              <span className="format-badge" key={format}>
+                                {format}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                         <span title={photo.directory}>{summarizePath(photo.directory)}</span>
                       </div>
                     </button>
@@ -1196,6 +1208,12 @@ function App() {
                       {DECISION_LABELS[activeDecision]}
                     </strong>
                   </div>
+                  {selectedPhoto.formats.length > 1 ? (
+                    <div className="detail-list__row">
+                      <span>Formats</span>
+                      <strong>{selectedPhoto.formats.join(" + ")}</strong>
+                    </div>
+                  ) : null}
                   <div className="detail-list__row">
                     <span>Zoom</span>
                     <strong>{Math.round(viewerState.zoom * 100)}%</strong>
@@ -1461,11 +1479,11 @@ function summarizePath(path: string) {
 }
 
 function applyMovedPhotos(photos: Photo[], movedPhotos: MovedPhoto[]) {
-  const movedPhotoMap = new Map<string, MovedPhoto>();
+  const movedPhotoMap = new Map<string, MovedPathMapping>();
 
   for (const movedPhoto of movedPhotos) {
-    for (const sourcePath of getMovedPhotoSourcePaths(movedPhoto)) {
-      movedPhotoMap.set(sourcePath, movedPhoto);
+    for (const mapping of getMovedPathMappings(movedPhoto)) {
+      movedPhotoMap.set(mapping.sourcePath, mapping);
     }
   }
 
@@ -1478,9 +1496,10 @@ function applyMovedPhotos(photos: Photo[], movedPhotos: MovedPhoto[]) {
       }
 
       const destinationPath = movedPhoto.destinationPath;
+      const previewMove = movedPhotoMap.get(photo.previewPath);
       const nextPreviewPath = isBrowserViewableExtension(photo.extension)
         ? destinationPath
-        : photo.previewPath;
+        : previewMove?.destinationPath ?? photo.previewPath;
       const nextUrl = photo.previewStatus === "ready"
         ? convertFileSrc(nextPreviewPath)
         : "";
@@ -1520,23 +1539,24 @@ function remapPhotoState<T>(current: Record<string, T>, movedPhotos: MovedPhoto[
   let nextState = current;
 
   for (const movedPhoto of movedPhotos) {
-    const sourcePath = getMovedPhotoSourcePaths(movedPhoto).find(
-      (sourcePath) =>
-        sourcePath !== movedPhoto.destinationPath &&
-        Object.prototype.hasOwnProperty.call(nextState, sourcePath),
-    );
+    for (const mapping of getMovedPathMappings(movedPhoto)) {
+      const sourcePath =
+        mapping.sourcePath !== mapping.destinationPath &&
+        Object.prototype.hasOwnProperty.call(nextState, mapping.sourcePath)
+          ? mapping.sourcePath
+          : undefined;
 
-    if (!sourcePath) {
-      continue;
-    }
+      if (!sourcePath) {
+        continue;
+      }
 
-    if (nextState === current) {
-      nextState = { ...current };
-    }
+      if (nextState === current) {
+        nextState = { ...current };
+      }
 
-    nextState[movedPhoto.destinationPath] = nextState[sourcePath];
-    for (const sourcePath of getMovedPhotoSourcePaths(movedPhoto)) {
+      const stateValue = nextState[sourcePath];
       delete nextState[sourcePath];
+      nextState[mapping.destinationPath] = stateValue;
     }
   }
 
@@ -1551,6 +1571,27 @@ function getMovedPhotoSourcePaths(movedPhoto: MovedPhoto) {
   return [movedPhoto.sourcePath, movedPhoto.requestedSourcePath].filter(
     (sourcePath): sourcePath is string => Boolean(sourcePath),
   );
+}
+
+type MovedPathMapping = {
+  sourcePath: string;
+  destinationPath: string;
+  decision: PhotoDecision;
+};
+
+function getMovedPathMappings(movedPhoto: MovedPhoto): MovedPathMapping[] {
+  return [
+    ...getMovedPhotoSourcePaths(movedPhoto).map((sourcePath) => ({
+      sourcePath,
+      destinationPath: movedPhoto.destinationPath,
+      decision: movedPhoto.decision,
+    })),
+    ...(movedPhoto.companions ?? []).map((companion) => ({
+      sourcePath: companion.sourcePath,
+      destinationPath: companion.destinationPath,
+      decision: movedPhoto.decision,
+    })),
+  ];
 }
 
 function isBrowserViewableExtension(extension: string) {

@@ -42,7 +42,6 @@ const OVERLAY_METADATA_LABELS = ["ISO", "Aperture", "Shutter"] as const;
 export function PhotoStage({
   decision,
   emphasis = "secondary",
-  isMetadataLoading = false,
   overlayMetadata,
   photo,
   showMetadataOverlay = false,
@@ -116,12 +115,12 @@ export function PhotoStage({
     naturalSize && viewportSize.width && viewportSize.height
       ? buildFrameMetrics(viewerState, viewportSize, naturalSize)
       : null;
-  const overlayRows = OVERLAY_METADATA_LABELS.map((label) => ({
-    label,
-    value:
-      overlayMetadata?.find((item) => item.label === label)?.value ??
-      (isMetadataLoading ? "…" : "—"),
-  }));
+  const overlayRows = OVERLAY_METADATA_LABELS.flatMap((label) => {
+    const value = overlayMetadata?.find((item) => item.label === label)?.value;
+
+    return isUsefulOverlayValue(value) ? [{ label, value }] : [];
+  });
+  const shouldShowMetadataOverlay = showMetadataOverlay && overlayRows.length > 0;
   const isPreviewReady =
     photo?.previewStatus === "ready" && Boolean(photo.url) && !hasImageError;
   const previewMessage = getPreviewMessage(photo, hasImageError);
@@ -288,7 +287,7 @@ export function PhotoStage({
                 <span className={`decision-chip decision-chip--${decision} decision-chip--overlay`}>
                   {decision}
                 </span>
-                {showMetadataOverlay ? (
+                {shouldShowMetadataOverlay ? (
                   <div className="photo-stage__meta">
                     {overlayRows.map((item) => (
                       <div className="photo-stage__meta-row" key={item.label}>
@@ -393,6 +392,16 @@ function normalizeViewerState(
   }
 
   return { zoom, centerX, centerY };
+}
+
+function isUsefulOverlayValue(value: string | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  const normalized = value.trim();
+
+  return normalized !== "" && normalized !== "—" && normalized !== "…";
 }
 
 function getFitSize(viewport: Size, natural: Size) {

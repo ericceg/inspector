@@ -26,6 +26,7 @@ export type BackendPhoto = {
   previewPath: string;
   previewReady: boolean;
   isRaw: boolean;
+  formats: string[];
   decision: PhotoDecision;
 };
 
@@ -53,6 +54,12 @@ export type MovedPhoto = {
   requestedSourcePath?: string;
   destinationPath: string;
   decision: PhotoDecision;
+  companions?: MovedCompanion[];
+};
+
+export type MovedCompanion = {
+  sourcePath: string;
+  destinationPath: string;
 };
 
 export type MoveSummary = {

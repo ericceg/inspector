@@ -516,6 +516,25 @@ button {
   font-size: 0.86rem;
 }
 
+.format-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.format-badge {
+  border: 1px solid rgb(100 116 139 / 0.28);
+  background: rgb(255 255 255 / 0.72);
+  color: var(--text);
+  border-radius: 2px;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.67rem;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
 .viewer {
   grid-area: viewer;
   min-width: 0;
